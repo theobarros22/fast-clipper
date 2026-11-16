@@ -65,6 +65,58 @@ def test_live_session_segments_and_instant_clip(tmp_path):
         session.stop()
 
 
+def test_live_session_auto_transcribe_subtitles(tmp_path):
+    if not FIXTURE_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    queue = DurableTaskQueue()
+    out_dir = tmp_path / "clips_sub_out"
+    runner = PipelineRunner(queue=queue, output_dir=out_dir)
+
+    called = {"count": 0}
+
+    def fake_transcribe(media_path, lang):
+        called["count"] += 1
+        assert media_path.is_file()
+        assert lang == "pt"
+        return {
+            "full_text": "jogada insana ao vivo",
+            "words": [
+                {"word": "jogada", "start_s": 0.1, "end_s": 0.6},
+                {"word": "insana", "start_s": 0.7, "end_s": 1.2},
+                {"word": "ao", "start_s": 1.3, "end_s": 1.6},
+                {"word": "vivo", "start_s": 1.7, "end_s": 2.2},
+            ],
+        }
+
+    session = LiveClipSession(
+        session_id="live_test_subs",
+        url="https://www.youtube.com/watch?v=live123",
+        session_dir=tmp_path / "live_subs",
+        pipeline_runner=runner,
+        segment_duration_s=2.0,
+        default_render_opts={"burn_subtitles": True, "language": "pt", "layout": "solo"},
+        stream_resolver=lambda _: str(FIXTURE_VIDEO.resolve()),
+        transcribe_fn=fake_transcribe,
+    )
+    session.start()
+    try:
+        deadline = time.time() + 15.0
+        while time.time() < deadline:
+            session._scan_new_segments(include_last=not session.running)
+            if len(session.buffer) >= 1 and (not session.running or len(session.buffer) >= 2):
+                break
+            time.sleep(0.3)
+
+        res = session.mark_and_clip(pre_s=3.0, post_s=0.0, titulo="Live Legendada", background=False)
+        assert res["status"] == "done", res
+        assert called["count"] == 1
+        assert res["transcript_text"] == "jogada insana ao vivo"
+        assert (out_dir / res["filename"]).is_file()
+    finally:
+        session.stop()
+
+
 def test_studio_live_api_endpoints():
     client = TestClient(app)
 

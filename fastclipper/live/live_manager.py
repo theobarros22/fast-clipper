@@ -124,8 +124,10 @@ class LiveClipSession:
         retention_seconds: float = 1800.0,
         auto_clip: bool = False,
         auto_clip_duration_s: float = 25.0,
+        auto_clip_threshold_db: float = -12.0,
         default_render_opts: Optional[Dict[str, Any]] = None,
         stream_resolver: Optional[Callable[[str], str]] = None,
+        transcribe_fn: Optional[Callable[[Path, str], Dict[str, Any]]] = None,
     ):
         self.session_id = session_id
         self.url = url
@@ -144,9 +146,11 @@ class LiveClipSession:
         self.retention_seconds = max(60.0, float(retention_seconds))
         self.auto_clip = bool(auto_clip)
         self.auto_clip_duration_s = max(5.0, float(auto_clip_duration_s))
+        self.auto_clip_threshold_db = float(auto_clip_threshold_db)
         self.auto_clip_cooldown_s = max(20.0, self.auto_clip_duration_s)
         self.default_render_opts = dict(default_render_opts or {})
         self.stream_resolver = stream_resolver or resolve_live_stream_url
+        self.transcribe_fn = transcribe_fn
 
         self.buffer = SegmentedBuffer(
             buffer_dir=self.segments_dir,
@@ -312,7 +316,7 @@ class LiveClipSession:
                 if self.auto_clip and novos and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
                     last_seg_file = self.segments_dir / f"seg_{novos[-1]:05d}.ts"
                     max_db = _measure_segment_volume_db(self.ffmpeg_bin, last_seg_file)
-                    if max_db is not None and max_db > -12.0 and now_t >= 4.0:
+                    if max_db is not None and max_db > self.auto_clip_threshold_db and now_t >= 4.0:
                         self._last_auto_clip_s = now_t
                         ini = max(0.0, now_t - self.auto_clip_duration_s)
                         threading.Thread(
@@ -416,6 +420,19 @@ class LiveClipSession:
             self.extract_window(inicio_s, fim_s, window_mp4)
             dur = max(1.0, fim_s - inicio_s)
             opts = {**self.default_render_opts, **(render_opts or {})}
+            burn_subs = bool(opts.get("burn_subtitles", False))
+            subtitles_words = opts.get("subtitles")
+            transcript_text = ""
+
+            if burn_subs and not subtitles_words and self.transcribe_fn is not None:
+                try:
+                    lang = str(opts.get("language", "pt") or "pt")
+                    tr = self.transcribe_fn(window_mp4, lang) or {}
+                    subtitles_words = tr.get("words") or None
+                    transcript_text = str(tr.get("full_text", "") or "")
+                except Exception as exc:
+                    logger.warning("Falha na transcrição automática do clipe ao vivo: %s", exc)
+
             params = {
                 "video_path": str(window_mp4),
                 "inicio_s": 0.0,
@@ -425,8 +442,10 @@ class LiveClipSession:
                 "gameplay_rect": opts.get("gameplay_rect"),
                 "stacked_facecam_height": int(opts.get("stacked_facecam_height", 720)),
                 "aspect_ratio": opts.get("aspect_ratio", "9:16"),
+                "subtitles": subtitles_words,
+                "subtitles_are_absolute": False,
                 "subtitle_preset": opts.get("subtitle_preset", "viral_clean"),
-                "burn_subtitles": bool(opts.get("burn_subtitles", False)),
+                "burn_subtitles": burn_subs and bool(subtitles_words),
             }
             result = self.pipeline_runner.render_clip(params)
             if result.success and result.output_video_path:
@@ -437,6 +456,7 @@ class LiveClipSession:
                     "inicio_s": round(inicio_s, 2),
                     "fim_s": round(fim_s, 2),
                     "download_url": f"/api/v1/studio/video/{fname}",
+                    "transcript_text": transcript_text,
                     "created_at": time.time(),
                 }
                 extra_entries = []
@@ -544,9 +564,15 @@ class LiveClipSession:
 class LiveManager:
     """Controlador singleton de sessão ao vivo do Studio."""
 
-    def __init__(self, projects_root: Path, pipeline_runner: Any):
+    def __init__(
+        self,
+        projects_root: Path,
+        pipeline_runner: Any,
+        transcribe_fn: Optional[Callable[[Path, str], Dict[str, Any]]] = None,
+    ):
         self.projects_root = Path(projects_root)
         self.pipeline_runner = pipeline_runner
+        self.transcribe_fn = transcribe_fn
         self._lock = threading.Lock()
         self.current_session: Optional[LiveClipSession] = None
 
@@ -557,6 +583,7 @@ class LiveManager:
         retention_seconds: float = 1800.0,
         auto_clip: bool = False,
         auto_clip_duration_s: float = 25.0,
+        auto_clip_threshold_db: float = -12.0,
         default_render_opts: Optional[Dict[str, Any]] = None,
         stream_resolver: Optional[Callable[[str], str]] = None,
     ) -> LiveClipSession:
@@ -575,8 +602,10 @@ class LiveManager:
                 retention_seconds=retention_seconds,
                 auto_clip=auto_clip,
                 auto_clip_duration_s=auto_clip_duration_s,
+                auto_clip_threshold_db=auto_clip_threshold_db,
                 default_render_opts=default_render_opts,
                 stream_resolver=stream_resolver,
+                transcribe_fn=self.transcribe_fn,
             )
             session.start()
             self.current_session = session

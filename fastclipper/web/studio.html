@@ -441,9 +441,14 @@
                                 <input type="text" id="live_url" class="input-text" placeholder="https://www.youtube.com/watch?v=... ou https://x.com/...">
                             </div>
                             <div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap;">
-                                <label class="checkbox-row" style="margin:0 8px 6px 0;">
+                                <label class="checkbox-row" style="margin:0 4px 6px 0;">
                                     <input type="checkbox" id="live_autoclip"> Auto-clipar picos
                                 </label>
+                                <select id="live_threshold_db" aria-label="Sensibilidade do pico de áudio" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
+                                    <option value="-8">Pico alto (-8 dB)</option>
+                                    <option value="-12" selected>Padrão (-12 dB)</option>
+                                    <option value="-18">Sensível (-18 dB)</option>
+                                </select>
                                 <button type="button" id="btn-live-start" class="btn-sec">Iniciar Live</button>
                                 <button type="button" id="btn-live-stop" class="chip" disabled>Parar</button>
                             </div>
@@ -972,6 +977,7 @@ http://127.0.0.1:8000/docs</div>
             const hFc = document.getElementById('h-facecam');
             const subPreset = document.getElementById('subtitle_preset');
             const ar = document.getElementById('aspect_ratio');
+            const langEl = document.getElementById('transcribe-lang');
             return {
                 layout: currentLayout,
                 facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
@@ -980,6 +986,7 @@ http://127.0.0.1:8000/docs</div>
                 aspect_ratio: ar ? ar.value : '9:16',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
                 subtitle_preset: subPreset ? subPreset.value : 'viral_bounce',
+                language: langEl ? langEl.value : 'pt',
             };
         }
 
@@ -1033,6 +1040,7 @@ http://127.0.0.1:8000/docs</div>
                     body: JSON.stringify({
                         url,
                         auto_clip: document.getElementById('live_autoclip').checked,
+                        auto_clip_threshold_db: parseFloat(document.getElementById('live_threshold_db').value) || -12.0,
                         ...opts,
                     }),
                 });

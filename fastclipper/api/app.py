@@ -116,7 +116,11 @@ prechecker = MediaPrechecker()
 vod_ingestor = VodIngestor(store=sqlite_store, projects_root=ROOT / "data" / "projects")
 whisper_service = WhisperTranscriptionService(store=sqlite_store, model_name="small")
 pipeline_runner = PipelineRunner(queue=durable_queue, output_dir=ROOT / "data" / "output_clips")
-live_manager = LiveManager(projects_root=ROOT / "data" / "projects", pipeline_runner=pipeline_runner)
+live_manager = LiveManager(
+    projects_root=ROOT / "data" / "projects",
+    pipeline_runner=pipeline_runner,
+    transcribe_fn=lambda path, lang: whisper_service.transcribe(media_path=path, language=lang),
+)
 package_exporter = PackageExporter(exports_root=ROOT / "data" / "exports")
 
 # Registra organização e usuário padrão para demonstração imediata
@@ -238,6 +242,7 @@ class LiveStartRequest(BaseModel):
     retention_seconds: float = 1800.0
     auto_clip: bool = False
     auto_clip_duration_s: float = 25.0
+    auto_clip_threshold_db: float = -12.0
     layout: str = "stacked"
     facecam_rect: Optional[Dict[str, Any]] = None
     gameplay_rect: Optional[Dict[str, Any]] = None
@@ -245,6 +250,7 @@ class LiveStartRequest(BaseModel):
     aspect_ratio: str = "9:16"
     burn_subtitles: bool = False
     subtitle_preset: str = "viral_clean"
+    language: str = "pt"
 
 
 class LiveMarkRequest(BaseModel):
@@ -258,6 +264,7 @@ class LiveMarkRequest(BaseModel):
     aspect_ratio: Optional[str] = None
     burn_subtitles: Optional[bool] = None
     subtitle_preset: Optional[str] = None
+    language: Optional[str] = None
 
 
 class TranscribeRequest(BaseModel):
@@ -853,6 +860,7 @@ def studio_live_start(req: LiveStartRequest):
             "aspect_ratio": req.aspect_ratio,
             "burn_subtitles": req.burn_subtitles,
             "subtitle_preset": req.subtitle_preset,
+            "language": req.language,
         }
         session = live_manager.start_session(
             url=req.url,
@@ -860,6 +868,7 @@ def studio_live_start(req: LiveStartRequest):
             retention_seconds=req.retention_seconds,
             auto_clip=req.auto_clip,
             auto_clip_duration_s=req.auto_clip_duration_s,
+            auto_clip_threshold_db=req.auto_clip_threshold_db,
             default_render_opts=render_opts,
         )
         return session.get_status()
@@ -893,6 +902,8 @@ def studio_live_mark(req: LiveMarkRequest):
         render_opts["burn_subtitles"] = req.burn_subtitles
     if req.subtitle_preset is not None:
         render_opts["subtitle_preset"] = req.subtitle_preset
+    if req.language is not None:
+        render_opts["language"] = req.language
 
     try:
         return live_manager.mark_clip(
