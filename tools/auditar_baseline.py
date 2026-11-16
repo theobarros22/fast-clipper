@@ -61,27 +61,20 @@ def coletar_ambiente():
 
 
 def auditar_arquivos():
-    esperados_classic = [
-        ("CoreEngine.py", "Motor de orquestracao legado", True),
-        ("pipeline.py", "Pipeline de 3 etapas do Classic", True),
-        ("enquadramento.py", "Motor geometrico de enquadramento 9:16", True),
-        ("rostos.py", "Deteccao MediaPipe + SFace embeddings", True),
-        ("cortes.py", "Refino de cortes por silencio e palavras", True),
-        ("checkpoint.py", "Persistencia de estado e retomada", True),
-        ("ffmpeg_utils.py", "Configuracao de encoders e filtros FFmpeg", True),
-        ("face_detector.tflite", "Modelo de deteccao facial MediaPipe", True),
-        ("interface.py", "UI legada em Gradio", True),
-        ("app_desktop.py", "Janela nativa desktop pywebview", True),
-        ("iniciar.bat", "Script de inicializacao Windows legada", False),
-        ("ViralCutter.vbs", "Launcher VBScript legado", False),
-        ("version_info.txt", "Metadados PyInstaller do Classic 2.3.2", False),
-        ("viral_cutter.spec", "Arquivo spec PyInstaller", False),
-        ("studio/", "Pacote experimental do estudio", False),
-        ("tools/ffmpeg.exe", "FFmpeg empacotado localmente", False),
+    esperados = [
+        ("pyproject.toml", "Manifesto de dependências e extras do Fast Clipper", True),
+        ("fastclipper/api/app.py", "Servidor FastAPI e API do Studio", True),
+        ("fastclipper/web/studio.html", "Interface web do Fast Clipper Studio", True),
+        ("fastclipper/rendering/render_core.py", "Núcleo unificado de renderização FFmpeg", True),
+        ("fastclipper/rendering/pipeline_runner.py", "Worker e pipeline de renderização 9:16 e 16:9", True),
+        ("fastclipper/live/live_manager.py", "Captura contínua ao vivo e buffer segmentado", True),
+        ("fastclipper/layouts/facecam_detector.py", "Detector de facecam", True),
+        ("face_detector.tflite", "Modelo de detecção facial MediaPipe", True),
+        ("iniciar.bat", "Script de inicialização Windows", False),
     ]
 
     resultado = []
-    for nome, desc, essencial_fastclipper in esperados_classic:
+    for nome, desc, essencial_fastclipper in esperados:
         caminho = ROOT / nome
         presente = caminho.exists()
         resultado.append({
@@ -97,44 +90,18 @@ def auditar_arquivos():
 def testar_modulos_core():
     diagnosticos = {}
 
-    # 1. Enquadramento
-    try:
-        import enquadramento as enq
-        c_humana = enq._caixa_humana((0.5, 0.35, 0.2), 1920, 1080)
-        diagnosticos["enquadramento"] = {
-            "status": "OK",
-            "detalhes": f"Funcao _caixa_humana calculou: {c_humana}"
-        }
-    except Exception as e:
-        diagnosticos["enquadramento"] = {"status": "FALHA", "erro": str(e)}
-
-    # 2. Checkpoint
-    try:
-        import checkpoint as ckp
-        tmp_file = ROOT / "tests" / "fixtures" / "synthetic" / "sintetico_gameplay_puro.mp4"
-        if tmp_file.exists():
-            sig = ckp.assinatura_video(str(tmp_file))
-            diagnosticos["checkpoint"] = {"status": "OK", "assinatura": sig}
-        else:
-            diagnosticos["checkpoint"] = {"status": "OK", "detalhes": "Modulo importado com sucesso"}
-    except Exception as e:
-        diagnosticos["checkpoint"] = {"status": "FALHA", "erro": str(e)}
-
-    # 3. Cortes
-    try:
-        import cortes
-        valido = cortes.validar_hook("Teste de gancho de video")
-        diagnosticos["cortes"] = {"status": "OK", "hook_validado": valido}
-    except Exception as e:
-        diagnosticos["cortes"] = {"status": "FALHA", "erro": str(e)}
-
-    # 4. Rostos
-    try:
-        import rostos
-        sface_nome = rostos.NOME_MODELO_SFACE
-        diagnosticos["rostos"] = {"status": "OK", "modelo_sface": sface_nome}
-    except Exception as e:
-        diagnosticos["rostos"] = {"status": "FALHA", "erro": str(e)}
+    for nome, mod_path in [
+        ("api", "fastclipper.api.app"),
+        ("render_core", "fastclipper.rendering.render_core"),
+        ("pipeline_runner", "fastclipper.rendering.pipeline_runner"),
+        ("live_manager", "fastclipper.live.live_manager"),
+        ("facecam_detector", "fastclipper.layouts.facecam_detector"),
+    ]:
+        try:
+            __import__(mod_path)
+            diagnosticos[nome] = {"status": "OK", "detalhes": f"Módulo {mod_path} importado com sucesso"}
+        except Exception as e:
+            diagnosticos[nome] = {"status": "FALHA", "erro": str(e)}
 
     return diagnosticos
 

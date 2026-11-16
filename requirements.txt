@@ -1,18 +1,8 @@
-anthropic
-gradio
-matplotlib
-mediapipe
-numpy
-openai-whisper
-opencv-python
-pydub
-pyinstaller
-pytest      # a suite usa fixtures de pytest; unittest ignora 41 testes
-pywebview  # janela nativa (WebView2) — o app nao abre mais no navegador
-torch
-
-# Performance e novas funcionalidades (04/07/2026) — todas com fallback:
-# o app funciona sem elas, mas fica mais rápido/completo com elas.
-scenedetect
-faster-whisper
-yt-dlp
+# Dependências principais e de desenvolvimento do Fast Clipper (alinhadas a pyproject.toml)
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7
+faster-whisper>=1.1
+yt-dlp>=2026.1
+pytest>=8.0
+httpx>=0.27

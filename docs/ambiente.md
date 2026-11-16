@@ -40,7 +40,7 @@ uv venv --python 3.11 .venv
 ### Passo 2: Instalação das Dependências Fixadas
 Como o repositório utiliza o repositório oficial de wheels da NVIDIA/PyTorch (`https://download.pytorch.org/whl/cu124`) como índice complementar, utilize a flag `--index-strategy unsafe-best-match` para resolver pacotes padrão simultaneamente ao PyTorch CUDA:
 ```powershell
-uv pip install -r requirements-lock.txt --index-strategy unsafe-best-match
+pip install -e ".[dev,transcribe]"
 ```
 
 *(Opcional: instalação de pacotes de desenvolvimento/testes complementares)*:

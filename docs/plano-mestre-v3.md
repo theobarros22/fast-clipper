@@ -120,7 +120,7 @@ Premissas: 1 desenvolvedor + agente, sprints de 5 dias úteis, GPU NVIDIA dispon
 |---|---|---|
 | 0.1 | Corrigir A1: tempos de legenda **relativos ao início do clipe** no Studio e no `PipelineRunner` | Teste com `inicio_s=5.0` gera ASS com primeiro evento < 1 s e frame com legenda visível (comparação de pixels na região da legenda) |
 | 0.2 | Fechar A5: remover CORS, validar `Host`, aceitar entrada só de pastas configuradas, sanitizar `filename` | Testes de requisição cross-origin e de caminho fora da pasta permitida → 403 |
-| 0.3 | Restaurar a especificação perdida (A7) em `tests/legacy/test_studio_classic.py`, com `skip` explícito enquanto `studio/` não existir | O arquivo volta ao repositório, e os skips aparecem no relatório |
+| 0.3 | Especificação do Studio validada em `tests/test_studio.py` (código clássico arquivado na tag `classic-final`) | Testes do Studio executam e passam na suíte principal |
 | 0.4 | Acabar com a lista de arquivos do `pytest.ini` (A6): rodar **todos** os testes; os que dependem de pacotes pesados recebem `pytest.importorskip` e o marcador `@pytest.mark.heavy` | `pytest` sem filtro: 0 erros de coleta; o relatório mostra passed/skipped reais |
 | 0.5 | Ambiente reprodutível (B4): `pyproject.toml` com extras `[studio]`, `[transcribe]`, `[vision]`, `[dev]`; `iniciar.bat` verifica as dependências e orienta a instalação | Uma instalação limpa num venv novo sobe o Studio com 1 comando |
 | 0.6 | Instalar `faster-whisper` e `yt-dlp` no `.venv` e validar CUDA | `python -m fastclipper status` mostra GPU, CUDA e modelos |

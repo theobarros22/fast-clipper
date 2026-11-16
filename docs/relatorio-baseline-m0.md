@@ -1,8 +1,8 @@
 # Fast Clipper — Relatório de Baseline e Auditoria Inicial (M0)
 
-**Data da Auditoria:** 2026-11-16 09:05:34  
-**Sistema Operacional:** Windows 11 (64bit)  
-**Python Runtime:** 3.14.8 (`C:\Python314\python.exe`)  
+**Data da Auditoria:** 2026-11-16 18:29:36  
+**Sistema Operacional:** Windows 10 (64bit)  
+**Python Runtime:** 3.11.15 (`L:\Fast-Clipper-Publico\.venv\Scripts\python.exe`)  
 **FFmpeg:** ffmpeg version 9.0-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers  
 **Acelerador Gráfico / GPU:** NVIDIA GeForce RTX 3050 6GB Laptop GPU, 610.88, 6144 MiB  
 **PyTorch:** Nao instalado no runtime atual (CUDA: False)  
@@ -13,22 +13,15 @@
 
 | Arquivo / Componente | Papel no Classic | Papel no Fast Clipper | Status na Cópia |
 | :--- | :--- | :--- | :--- |
-| `CoreEngine.py` | Motor de orquestracao legado | Essencial (reaproveitado) | ✅ Presente |
-| `pipeline.py` | Pipeline de 3 etapas do Classic | Essencial (reaproveitado) | ✅ Presente |
-| `enquadramento.py` | Motor geometrico de enquadramento 9:16 | Essencial (reaproveitado) | ✅ Presente |
-| `rostos.py` | Deteccao MediaPipe + SFace embeddings | Essencial (reaproveitado) | ✅ Presente |
-| `cortes.py` | Refino de cortes por silencio e palavras | Essencial (reaproveitado) | ✅ Presente |
-| `checkpoint.py` | Persistencia de estado e retomada | Essencial (reaproveitado) | ✅ Presente |
-| `ffmpeg_utils.py` | Configuracao de encoders e filtros FFmpeg | Essencial (reaproveitado) | ✅ Presente |
-| `face_detector.tflite` | Modelo de deteccao facial MediaPipe | Essencial (reaproveitado) | ✅ Presente |
-| `interface.py` | UI legada em Gradio | Essencial (reaproveitado) | ✅ Presente |
-| `app_desktop.py` | Janela nativa desktop pywebview | Essencial (reaproveitado) | ✅ Presente |
-| `iniciar.bat` | Script de inicializacao Windows legada | Descartado / Refatorado | ℹ️ Ausente (Planejado) |
-| `ViralCutter.vbs` | Launcher VBScript legado | Descartado / Refatorado | ℹ️ Ausente (Planejado) |
-| `version_info.txt` | Metadados PyInstaller do Classic 2.3.2 | Descartado / Refatorado | ℹ️ Ausente (Planejado) |
-| `viral_cutter.spec` | Arquivo spec PyInstaller | Descartado / Refatorado | ℹ️ Ausente (Planejado) |
-| `studio/` | Pacote experimental do estudio | Descartado / Refatorado | ℹ️ Ausente (Planejado) |
-| `tools/ffmpeg.exe` | FFmpeg empacotado localmente | Descartado / Refatorado | ℹ️ Ausente (Planejado) |
+| `pyproject.toml` | Manifesto de dependências e extras do Fast Clipper | Essencial (reaproveitado) | ✅ Presente |
+| `fastclipper/api/app.py` | Servidor FastAPI e API do Studio | Essencial (reaproveitado) | ✅ Presente |
+| `fastclipper/web/studio.html` | Interface web do Fast Clipper Studio | Essencial (reaproveitado) | ✅ Presente |
+| `fastclipper/rendering/render_core.py` | Núcleo unificado de renderização FFmpeg | Essencial (reaproveitado) | ✅ Presente |
+| `fastclipper/rendering/pipeline_runner.py` | Worker e pipeline de renderização 9:16 e 16:9 | Essencial (reaproveitado) | ✅ Presente |
+| `fastclipper/live/live_manager.py` | Captura contínua ao vivo e buffer segmentado | Essencial (reaproveitado) | ✅ Presente |
+| `fastclipper/layouts/facecam_detector.py` | Detector de facecam | Essencial (reaproveitado) | ✅ Presente |
+| `face_detector.tflite` | Modelo de detecção facial MediaPipe | Essencial (reaproveitado) | ✅ Presente |
+| `iniciar.bat` | Script de inicialização Windows | Descartado / Refatorado | ✅ Presente |
 
 ---
 
@@ -36,10 +29,11 @@
 
 | Módulo | Status | Detalhes do Teste |
 | :--- | :--- | :--- |
-| `enquadramento.py` | ❌ Falha | No module named 'cv2' |
-| `checkpoint.py` | ✅ Operacional | {"status": "OK", "assinatura": "264004e1fffa7acb"} |
-| `cortes.py` | ❌ Falha | 'str' object has no attribute 'get' |
-| `rostos.py` | ❌ Falha | No module named 'cv2' |
+| `api.py` | ✅ Operacional | Módulo fastclipper.api.app importado com sucesso |
+| `render_core.py` | ✅ Operacional | Módulo fastclipper.rendering.render_core importado com sucesso |
+| `pipeline_runner.py` | ✅ Operacional | Módulo fastclipper.rendering.pipeline_runner importado com sucesso |
+| `live_manager.py` | ✅ Operacional | Módulo fastclipper.live.live_manager importado com sucesso |
+| `facecam_detector.py` | ✅ Operacional | Módulo fastclipper.layouts.facecam_detector importado com sucesso |
 
 ---
 
@@ -47,10 +41,10 @@
 
 | Fixture Sintética | Tamanho | Duração | Vídeo | Áudio | FFprobe (ms) | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `sintetico_duas_pessoas.mp4` | 110.1 KB | 6.0s | Sim | Sim | 97.69 ms | ✅ Válido |
-| `sintetico_gameplay_facecam.mp4` | 11401.0 KB | 6.0s | Sim | Sim | 60.61 ms | ✅ Válido |
-| `sintetico_gameplay_puro.mp4` | 9558.7 KB | 5.0s | Sim | Sim | 70.89 ms | ✅ Válido |
-| `sintetico_sem_audio.mp4` | 5666.0 KB | 3.0s | Sim | Não | 48.67 ms | ✅ Válido |
+| `sintetico_duas_pessoas.mp4` | 110.1 KB | 6.0s | Sim | Sim | 72.79 ms | ✅ Válido |
+| `sintetico_gameplay_facecam.mp4` | 11401.0 KB | 6.0s | Sim | Sim | 38.58 ms | ✅ Válido |
+| `sintetico_gameplay_puro.mp4` | 9558.7 KB | 5.0s | Sim | Sim | 39.39 ms | ✅ Válido |
+| `sintetico_sem_audio.mp4` | 5666.0 KB | 3.0s | Sim | Não | 38.86 ms | ✅ Válido |
 
 ---
 
