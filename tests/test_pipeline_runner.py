@@ -191,8 +191,7 @@ def test_pipeline_runner_comparison_job(runner_with_tmp):
 
 def test_api_queue_worker_process_next():
     # 0. Garante isolamento da fila global
-    durable_queue._jobs.clear()
-    durable_queue._idempotency_index.clear()
+    durable_queue.clear_all()
 
     # 1. Fila vazia
     res_empty = client.post("/api/v1/queue/worker/process-next")

@@ -21,6 +21,7 @@ from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode
 from fastclipper.layouts.engine import LayoutEngine
 from fastclipper.layouts.scene_detector import SceneDetector
 from fastclipper.rendering.encoder import HardwareEncoderManager, SOFTWARE_ENCODER
+from fastclipper.rendering.render_core import render_vertical_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -188,49 +189,17 @@ class IsolatedRenderAdapter:
         output_path: Path,
         layout_config: Optional[ChannelLayoutConfig] = None,
     ) -> bool:
-        """Renderiza corte 9:16 com redimensionamento, crop ou layout empilhado."""
-        layout_engine = LayoutEngine(ffmpeg_bin=self.ffmpeg_bin, ffprobe_bin=self.ffprobe_bin)
-        source_w, source_h = layout_engine.get_source_dimensions(source_path)
-
-        cmd = [
-            self.ffmpeg_bin,
-            "-loglevel", "error",
-            "-y",
-            "-ss", str(start_s),
-            "-t", str(duration_s),
-            "-i", str(source_path),
-        ]
-
-        if layout_config and layout_config.effective_mode() == LayoutMode.STACKED and layout_config.facecam_rect is not None:
-            filtro_complexo = layout_engine.build_filter_graph(layout_config, source_w, source_h)
-            cmd.extend([
-                "-filter_complex", filtro_complexo,
-                "-map", "[outv]",
-                "-map", "0:a?",
-            ])
-        else:
-            filtro_v = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
-            if layout_config:
-                filtro_v = layout_engine.build_filter_graph(layout_config, source_w, source_h)
-            cmd.extend(["-vf", filtro_v])
-
-        enc = self.encoder_manager.get_encoder()
-        enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
-
-        full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
-        res = subprocess.run(full_cmd, capture_output=True, text=True)
-
-        if res.returncode != 0 and enc != SOFTWARE_ENCODER:
-            logger.warning("Hardware encoder '%s' falhou. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
-            self.encoder_manager.mark_broken(enc)
-            sw_args = self.encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
-            full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
-            res = subprocess.run(full_cmd, capture_output=True, text=True)
-
-        if res.returncode != 0:
-            logger.error("Erro no FFmpeg: %s", res.stderr)
-            return False
-        return True
+        """Renderiza corte 9:16 via núcleo unificado render_core."""
+        return render_vertical_ffmpeg(
+            output_path=output_path,
+            start_s=start_s,
+            duration_s=duration_s,
+            ffmpeg_bin=self.ffmpeg_bin,
+            ffprobe_bin=self.ffprobe_bin,
+            encoder_manager=self.encoder_manager,
+            source_path=source_path,
+            layout_config=layout_config,
+        )
 
     def _render_via_buffer_segments(
         self,

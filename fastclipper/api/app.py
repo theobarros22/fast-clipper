@@ -27,10 +27,13 @@ from fastclipper.collaboration.service import (
     TenantAccessViolationError,
 )
 from fastclipper.ingest.precheck import MediaPrechecker
+from fastclipper.ingest.vod_ingest import VodIngestor
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.encoder import HardwareEncoderManager
 from fastclipper.rendering.pipeline_runner import PipelineRunner
 from fastclipper.social.oauth_vault import OAuthTokenVault, SocialPlatform
+from fastclipper.storage.sqlite_store import SQLiteStore, SQLiteTaskQueue
+from fastclipper.transcribe.whisper_service import WhisperTranscriptionService
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "testserver"}
@@ -96,13 +99,16 @@ async def local_security_guard(request: Request, call_next):
 
     return await call_next(request)
 
-# Serviços globais em memória / persistência
+# Serviços locais persistentes (SQLite WAL) e protótipos de apoio
+sqlite_store = SQLiteStore(ROOT / "data" / "fastclipper.db")
 collab_service = CollaborationService()
-durable_queue = DurableTaskQueue()
+durable_queue = SQLiteTaskQueue(sqlite_store)
 encoder_manager = HardwareEncoderManager()
 social_vault = OAuthTokenVault()
 prechecker = MediaPrechecker()
-pipeline_runner = PipelineRunner(queue=durable_queue)
+vod_ingestor = VodIngestor(store=sqlite_store, projects_root=ROOT / "data" / "projects")
+whisper_service = WhisperTranscriptionService(store=sqlite_store, model_name="small")
+pipeline_runner = PipelineRunner(queue=durable_queue, output_dir=ROOT / "data" / "output_clips")
 
 # Registra organização e usuário padrão para demonstração imediata
 collab_service.register_organization(org_id="org_default", nome="Agência Alfa", slug="alfa")
@@ -195,8 +201,32 @@ class StudioRenderRequest(BaseModel):
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
     subtitle_text: Optional[str] = None
+    words: Optional[List[Dict[str, Any]]] = None
+    subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
+
+
+class ImportSourceRequest(BaseModel):
+    video_path: str
+    authorization_ref: str
+    project_id: str = "proj_default"
+    title: Optional[str] = None
+
+
+class DownloadSourceRequest(BaseModel):
+    url: str
+    authorization_ref: str
+    project_id: str = "proj_default"
+    title: Optional[str] = None
+
+
+class TranscribeRequest(BaseModel):
+    video_path: Optional[str] = None
+    source_id: Optional[str] = None
+    language: Optional[str] = "pt"
+    model_name: Optional[str] = None
+    force_retranscribe: bool = False
 
 
 # Helper para extrair contexto de autenticação de headers
@@ -433,13 +463,80 @@ def stream_studio_clip(filename: str):
     return FileResponse(str(caminho), media_type="video/mp4", filename=filename)
 
 
+@app.post("/api/v1/studio/sources/import", tags=["Studio"])
+def studio_import_source(req: ImportSourceRequest):
+    """Importa um arquivo de vídeo local autorizado e registra no SQLite."""
+    safe_path = validate_input_path(req.video_path)
+    try:
+        return vod_ingestor.import_local_file(
+            file_path=safe_path,
+            authorization_ref=req.authorization_ref,
+            project_id=req.project_id,
+            title=req.title,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/studio/sources/download", tags=["Studio"])
+def studio_download_source(req: DownloadSourceRequest):
+    """Baixa um VOD autorizado via yt-dlp com guarda SSRF e registra no SQLite."""
+    try:
+        return vod_ingestor.download_from_url(
+            url=req.url,
+            authorization_ref=req.authorization_ref,
+            project_id=req.project_id,
+            title=req.title,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/v1/studio/sources", tags=["Studio"])
+def studio_list_sources(project_id: Optional[str] = Query(None)):
+    """Lista todas as fontes de vídeo registradas no SQLite."""
+    return sqlite_store.list_sources(project_id=project_id)
+
+
+@app.post("/api/v1/studio/transcribe", tags=["Studio"])
+def studio_transcribe_source(req: TranscribeRequest):
+    """Transcreve o vídeo com faster-whisper (CUDA/CPU) e retorna timestamps por palavra com cache SQLite."""
+    file_sha256: Optional[str] = None
+    if req.source_id:
+        src = sqlite_store.get_source(req.source_id)
+        if not src:
+            raise HTTPException(status_code=404, detail="Fonte não encontrada.")
+        target_path = Path(src["file_path"])
+        file_sha256 = src["file_sha256"]
+    elif req.video_path:
+        target_path = validate_input_path(req.video_path)
+    else:
+        raise HTTPException(status_code=400, detail="Informe 'source_id' ou 'video_path'.")
+
+    try:
+        return whisper_service.transcribe(
+            media_path=target_path,
+            file_sha256=file_sha256,
+            language=req.language,
+            model_name=req.model_name,
+            force_retranscribe=req.force_retranscribe,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Erro na transcrição: {exc}")
+
+
 @app.post("/api/v1/studio/render-now", tags=["Studio"])
 def render_studio_clip_immediate(req: StudioRenderRequest):
     """Renderiza um clipe 9:16 imediatamente a partir dos parâmetros do Studio."""
     safe_path = validate_input_path(req.video_path)
 
     subtitles_payload = None
-    if req.subtitle_text and req.subtitle_text.strip():
+    subtitles_are_absolute = req.subtitles_are_absolute
+    if req.words:
+        subtitles_payload = req.words
+    elif req.subtitle_text and req.subtitle_text.strip():
         palavras = req.subtitle_text.strip().split()
         if palavras:
             duracao = max(0.5, req.fim_s - req.inicio_s)
@@ -454,6 +551,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
                     "start_s": round(w_start, 3),
                     "end_s": round(w_end, 3),
                 })
+            subtitles_are_absolute = False
 
     params = {
         "video_path": str(safe_path),
@@ -463,6 +561,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "facecam_rect": req.facecam_rect,
         "gameplay_rect": req.gameplay_rect,
         "subtitles": subtitles_payload,
+        "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,
         "burn_subtitles": req.burn_subtitles,
     }

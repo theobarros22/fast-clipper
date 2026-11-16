@@ -32,6 +32,7 @@ from fastclipper.multicreator.renderer import ComparisonRenderer
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus, QueueJob
 from fastclipper.rendering.adapter import IsolatedRenderAdapter, RenderResult
 from fastclipper.rendering.encoder import HardwareEncoderManager, SOFTWARE_ENCODER
+from fastclipper.rendering.render_core import render_vertical_ffmpeg
 from fastclipper.subtitles.engine import SubtitleEngine
 from fastclipper.subtitles.models import CaptionCue, CaptionPreset, WordTiming
 
@@ -318,60 +319,18 @@ class PipelineRunner:
         layout_config: ChannelLayoutConfig,
         ass_path: Optional[Path] = None,
     ) -> bool:
-        """Renderiza via FFmpeg garantindo suporte a layout 9:16 e filtro de legenda."""
-        layout_engine = LayoutEngine(ffmpeg_bin=self.ffmpeg_bin, ffprobe_bin=self.ffprobe_bin)
-        source_w, source_h = layout_engine.get_source_dimensions(source_path)
-
-        cmd = [
-            self.ffmpeg_bin,
-            "-loglevel", "error",
-            "-y",
-            "-ss", str(start_s),
-            "-t", str(duration_s),
-            "-i", str(source_path),
-        ]
-
-        # Monta grafo de filtros
-        filtro_base = layout_engine.build_filter_graph(layout_config, source_w, source_h)
-
-        # Se houver legenda .ass, encadeia o filtro usando nome relativo e cwd do diretório da legenda
-        cwd = None
-        if ass_path and ass_path.exists():
-            cwd = str(ass_path.parent.resolve())
-            ass_filename = ass_path.name
-
-            if layout_config.effective_mode() == LayoutMode.STACKED and layout_config.facecam_rect is not None:
-                # Substitui a saída [outv] pelo encadeamento da legenda
-                filtro_base_modificado = filtro_base.replace("[outv]", "[pre_sub]")
-                filtro_completo = f"{filtro_base_modificado}; [pre_sub] ass={ass_filename} [outv]"
-                cmd.extend(["-filter_complex", filtro_completo, "-map", "[outv]", "-map", "0:a?"])
-            else:
-                filtro_v = f"{filtro_base},ass={ass_filename}"
-                cmd.extend(["-vf", filtro_v])
-        else:
-            if layout_config.effective_mode() == LayoutMode.STACKED and layout_config.facecam_rect is not None:
-                cmd.extend(["-filter_complex", filtro_base, "-map", "[outv]", "-map", "0:a?"])
-            else:
-                cmd.extend(["-vf", filtro_base])
-
-        enc = self.encoder_manager.get_encoder()
-        enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
-
-        full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
-        res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True)
-
-        if res.returncode != 0 and enc != SOFTWARE_ENCODER:
-            logger.warning("Encoder de hardware falhou, tentando fallback para %s: %s", SOFTWARE_ENCODER, res.stderr)
-            self.encoder_manager.mark_broken(enc)
-            sw_args = self.encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
-            full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
-            res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True)
-
-        if res.returncode != 0:
-            logger.error("FFmpeg falhou com erro: %s", res.stderr)
-            return False
-
-        return True
+        """Renderiza via núcleo unificado render_core com suporte a layout 9:16 e legenda ASS."""
+        return render_vertical_ffmpeg(
+            output_path=output_path,
+            start_s=start_s,
+            duration_s=duration_s,
+            ffmpeg_bin=self.ffmpeg_bin,
+            ffprobe_bin=self.ffprobe_bin,
+            encoder_manager=self.encoder_manager,
+            source_path=source_path,
+            layout_config=layout_config,
+            ass_path=ass_path,
+        )
 
     def _parse_subtitles_data(
         self,
