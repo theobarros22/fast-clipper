@@ -9,6 +9,8 @@ Permite operar todos os componentes da plataforma:
   - compare: Comparação e sincronização multi-criador Cross-POV (M5)
   - queue: Gerenciamento e execução de workers da fila durável (M6)
   - vault: Gestão segura de tokens sociais, autopost e kill switch (M6)
+  - studio: Estúdio de clipping interativo local 9:16 com abertura no navegador
+  - serve: Servidor de API REST e Control Plane
 """
 
 import argparse
@@ -498,6 +500,34 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_studio(args: argparse.Namespace) -> int:
+    """Inicia o Fast Clipper Studio local para clipping interativo 9:16 e abre o navegador."""
+    import threading
+    import webbrowser
+    import uvicorn
+
+    url = f"http://{args.host}:{args.port}"
+    print("=" * 65)
+    print("FAST CLIPPER STUDIO — ESTAÇÃO DE TRABALHO LOCAL (9:16)")
+    print("=" * 65)
+    print(f"Endereço Local : {url}")
+    print(f"Documentação API: {url}/docs")
+    print("Abrindo navegador para você iniciar o clipping imediatamente...")
+    print("=" * 65)
+
+    if not getattr(args, "no_browser", False):
+        def _open():
+            time.sleep(1.2)
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        threading.Thread(target=_open, daemon=True).start()
+
+    uvicorn.run("fastclipper.api.app:app", host=args.host, port=args.port, reload=args.reload)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="fastclipper",
@@ -579,6 +609,14 @@ def main():
     p_serve.add_argument("--port", type=int, default=8000, help="Porta HTTP (padrão: 8000)")
     p_serve.add_argument("--reload", action="store_true", help="Habilitar autoreload")
     p_serve.set_defaults(func=cmd_serve)
+
+    # studio
+    p_studio = subparsers.add_parser("studio", help="Inicia o Estúdio Local de Clipping 9:16 e abre no navegador")
+    p_studio.add_argument("--host", type=str, default="127.0.0.1", help="Endereço de bind (padrão: 127.0.0.1)")
+    p_studio.add_argument("--port", type=int, default=8000, help="Porta HTTP (padrão: 8000)")
+    p_studio.add_argument("--no-browser", action="store_true", help="Não abrir navegador automaticamente")
+    p_studio.add_argument("--reload", action="store_true", help="Habilitar autoreload")
+    p_studio.set_defaults(func=cmd_studio)
 
     args = parser.parse_args()
     if hasattr(args, "func"):

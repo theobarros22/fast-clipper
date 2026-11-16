@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Header, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from fastclipper.collaboration.models import AuthContext, EstadoMomento, PapelUsuario
@@ -138,6 +138,18 @@ class RegisterSocialAccountRequest(BaseModel):
 
 class KillSwitchRequest(BaseModel):
     active: bool
+
+
+class StudioRenderRequest(BaseModel):
+    video_path: str
+    inicio_s: float
+    fim_s: float
+    layout: str = "solo"
+    facecam_rect: Optional[Dict[str, int]] = None
+    gameplay_rect: Optional[Dict[str, int]] = None
+    subtitle_text: Optional[str] = None
+    subtitle_preset: str = "viral_bounce"
+    burn_subtitles: bool = True
 
 
 # Helper para extrair contexto de autenticação de headers
@@ -335,6 +347,86 @@ def set_kill_switch(req: KillSwitchRequest, x_org_id: str = Header("org_default"
 
 
 # -----------------------------------------------------------------------------
+# Rotas do Fast Clipper Studio Local (Cortes, Player e Renderização Imediata)
+# -----------------------------------------------------------------------------
+
+@app.get("/api/v1/studio/clips", tags=["Studio"])
+def list_studio_clips():
+    """Lista todos os clipes renderizados disponíveis no diretório de saída."""
+    out_dir = pipeline_runner.output_dir
+    if not out_dir.exists():
+        return []
+    arquivos = list(out_dir.glob("*.mp4"))
+    arquivos.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    res = []
+    for f in arquivos:
+        st = f.stat()
+        res.append({
+            "filename": f.name,
+            "path": str(f.resolve()),
+            "size_mb": round(st.st_size / (1024 * 1024), 2),
+            "modified_at": st.st_mtime,
+            "download_url": f"/api/v1/studio/video/{f.name}",
+        })
+    return res
+
+
+@app.get("/api/v1/studio/video/{filename}", tags=["Studio"])
+def stream_studio_clip(filename: str):
+    """Serve um clipe de vídeo renderizado para reprodução ou download."""
+    caminho = pipeline_runner.output_dir / filename
+    if not caminho.is_file():
+        raise HTTPException(status_code=404, detail="Clipe não encontrado")
+    return FileResponse(str(caminho), media_type="video/mp4", filename=filename)
+
+
+@app.post("/api/v1/studio/render-now", tags=["Studio"])
+def render_studio_clip_immediate(req: StudioRenderRequest):
+    """Renderiza um clipe 9:16 imediatamente a partir dos parâmetros do Studio."""
+    subtitles_payload = None
+    if req.subtitle_text and req.subtitle_text.strip():
+        palavras = req.subtitle_text.strip().split()
+        if palavras:
+            duracao = max(0.5, req.fim_s - req.inicio_s)
+            passo = duracao / len(palavras)
+            subtitles_payload = []
+            for i, p in enumerate(palavras):
+                w_start = req.inicio_s + i * passo
+                w_end = w_start + passo * 0.95
+                subtitles_payload.append({
+                    "word": p,
+                    "start_s": round(w_start, 3),
+                    "end_s": round(w_end, 3),
+                })
+
+    params = {
+        "video_path": req.video_path,
+        "inicio_s": req.inicio_s,
+        "fim_s": req.fim_s,
+        "layout": req.layout,
+        "facecam_rect": req.facecam_rect,
+        "gameplay_rect": req.gameplay_rect,
+        "subtitles": subtitles_payload,
+        "subtitle_preset": req.subtitle_preset,
+        "burn_subtitles": req.burn_subtitles,
+    }
+
+    result = pipeline_runner.render_clip(params)
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error or "Falha na renderização do clipe")
+
+    filename = Path(result.output_video_path).name if result.output_video_path else None
+    return {
+        "success": True,
+        "filename": filename,
+        "output_path": result.output_video_path,
+        "duration": result.duration,
+        "download_url": f"/api/v1/studio/video/{filename}" if filename else None,
+        "metadata": result.metadata,
+    }
+
+
+# -----------------------------------------------------------------------------
 # Painel Web Operacional (Calm Premium Design System)
 # -----------------------------------------------------------------------------
 
@@ -345,57 +437,77 @@ def get_dashboard():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast Clipper — Control Plane</title>
+    <title>Fast Clipper — Estúdio Local de Clipping 9:16</title>
     <style>
         :root {
-            --bg: #F6F5F3;
+            --bg: #F8F7F5;
             --card: #FFFFFF;
-            --ink: #1A1A19;
-            --sub: #6E6B66;
-            --muted: #A8A59F;
-            --line: #EBE9E4;
-            --accent: #2D6BFF;
-            --cta-bg: #1A1A19;
+            --ink: #191817;
+            --sub: #66635F;
+            --muted: #9E9B95;
+            --line: #E8E6E1;
+            --accent: #2563EB;
+            --accent-hover: #1D4ED8;
+            --accent-soft: #EFF6FF;
+            --cta-bg: #191817;
             --cta-fg: #FFFFFF;
-            --ok: #5BB36A;
-            --warn: #E6B23C;
-            --error: #E66A5C;
+            --ok: #16A34A;
+            --ok-soft: #F0FDF4;
+            --warn: #D97706;
+            --error: #DC2626;
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Geist", "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
             color: var(--ink);
             line-height: 1.5;
-            padding: 32px 48px;
+            padding: 24px 36px;
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid var(--line);
-            padding-bottom: 24px;
-            margin-bottom: 32px;
+            padding-bottom: 20px;
+            margin-bottom: 24px;
         }
         .brand {
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 22px;
+            font-weight: 700;
             letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .brand span {
             color: var(--accent);
+        }
+        .tag-studio {
+            background: var(--ink);
+            color: #FFF;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.5px;
         }
         .status-badge {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
-            font-family: "Geist Mono", monospace;
-            background: #EBF3FF;
-            color: var(--accent);
+            font-size: 12.5px;
+            font-family: monospace;
+            background: var(--ok-soft);
+            color: var(--ok);
+            border: 1px solid #BBF7D0;
             padding: 6px 14px;
             border-radius: 999px;
-            font-weight: 500;
+            font-weight: 600;
         }
         .badge-dot {
             width: 8px;
@@ -403,142 +515,595 @@ def get_dashboard():
             border-radius: 50%;
             background-color: var(--ok);
         }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
-            margin-bottom: 32px;
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
         }
-        .card {
-            background: var(--card);
+        .tab-btn {
+            background: transparent;
             border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 24px;
-        }
-        .card h2 {
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: var(--sub);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .metric-value {
-            font-size: 32px;
-            font-weight: 600;
-            font-family: "Geist Mono", monospace;
-            margin-bottom: 4px;
-        }
-        .metric-label {
-            font-size: 13px;
-            color: var(--muted);
-        }
-        .actions-panel {
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 32px;
-        }
-        .actions-panel h2 {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-        }
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--cta-bg);
-            color: var(--cta-fg);
-            border: none;
-            padding: 10px 20px;
+            padding: 9px 18px;
             border-radius: 999px;
             font-size: 13.5px;
             font-weight: 500;
+            color: var(--sub);
             cursor: pointer;
-            text-decoration: none;
-            margin-right: 8px;
-            transition: opacity 0.15s ease;
+            transition: all 0.15s ease;
         }
-        .btn:hover { opacity: 0.88; }
-        .btn-secondary {
-            background: transparent;
-            color: var(--ink);
-            border: 1px solid var(--line);
-        }
-        .btn-secondary:hover { background: #F0EEEA; }
-        .btn-danger {
-            background: var(--error);
+        .tab-btn.active {
+            background: var(--ink);
             color: #FFF;
+            border-color: var(--ink);
+        }
+
+        /* Studio Main Layout */
+        .studio-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 28px;
+            align-items: start;
+        }
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            margin-bottom: 24px;
+        }
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .field {
+            margin-bottom: 18px;
+        }
+        .label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--sub);
+            margin-bottom: 6px;
+        }
+        .input-text, .select-box, .textarea {
+            width: 100%;
+            padding: 10px 14px;
+            font-size: 13.5px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            background: #FAFAFA;
+            color: var(--ink);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .input-text:focus, .select-box:focus, .textarea:focus {
+            border-color: var(--accent);
+            background: #FFF;
+        }
+        .row-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .chips {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .chip {
+            background: #F0EEEA;
+            border: none;
+            font-size: 12px;
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--sub);
+            font-weight: 500;
+        }
+        .chip:hover {
+            background: #E5E3DD;
+        }
+        .duration-pill {
+            font-size: 12px;
+            font-family: monospace;
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        /* Layout Cards */
+        .layout-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .layout-card {
+            border: 2px solid var(--line);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+        .layout-card.selected {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+        .layout-card h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .layout-card p {
+            font-size: 12px;
+            color: var(--sub);
+        }
+
+        /* Primary Action Button */
+        .btn-render {
+            width: 100%;
+            background: var(--accent);
+            color: #FFFFFF;
+            border: none;
+            padding: 14px;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: background 0.15s ease;
+        }
+        .btn-render:hover {
+            background: var(--accent-hover);
+        }
+        .btn-render:disabled {
+            background: var(--muted);
+            cursor: not-allowed;
+        }
+
+        /* Right Panel: Phone Mockup / Video Player */
+        .phone-mockup {
+            width: 270px;
+            height: 480px;
+            background: #000;
+            border-radius: 28px;
+            border: 8px solid #282828;
+            margin: 0 auto 20px auto;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        .phone-mockup video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .no-video-placeholder {
+            color: #888;
+            font-size: 13px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .clip-list {
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .clip-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--line);
+            font-size: 13px;
+        }
+        .clip-item:hover {
+            background: #F9F9F8;
+        }
+        .clip-btn-play {
+            background: var(--cta-bg);
+            color: #FFF;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        /* Control Plane Grid */
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .metric-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            padding: 20px;
+        }
+        .metric-card h3 {
+            font-size: 13px;
+            color: var(--sub);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .metric-card .val {
+            font-size: 26px;
+            font-weight: 700;
+            font-family: monospace;
+        }
+        .metric-card .subtext {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
         }
         .terminal-box {
-            background: #19181A;
-            color: #ECEAE6;
-            font-family: "Geist Mono", monospace;
-            font-size: 13px;
-            padding: 18px;
-            border-radius: 12px;
-            overflow-x: auto;
+            background: #191817;
+            color: #F6F5F3;
+            font-family: monospace;
+            font-size: 12.5px;
+            padding: 16px;
+            border-radius: 10px;
             white-space: pre-wrap;
-            margin-top: 12px;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="brand">Fast<span>Clipper</span> <span style="font-size: 14px; color: var(--muted); font-weight: normal;">| Control Plane</span></div>
+        <div class="brand">
+            Fast<span>Clipper</span>
+            <span class="tag-studio">Studio Local</span>
+        </div>
         <div class="status-badge">
             <div class="badge-dot"></div>
-            SISTEMA OPERACIONAL (88 TESTES VERIFICADOS)
+            SISTEMA OPERACIONAL (88 TESTES VALIDADOS)
         </div>
     </div>
 
-    <div class="grid">
-        <div class="card">
-            <h2>Hardware Encoder</h2>
-            <div class="metric-value">NVENC / QSV</div>
-            <div class="metric-label">Fallback automático habilitado para libx264</div>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('studio')">Estúdio de Clipping 9:16</button>
+        <button class="tab-btn" onclick="switchTab('control')">Plano de Controle & Métricas</button>
+    </div>
+
+    <!-- TAB 1: ESTUDIO DE CLIPPING -->
+    <div id="tab-studio" class="studio-grid">
+        <!-- Coluna Esquerda: Configuração e Parâmetros -->
+        <div>
+            <div class="panel">
+                <div class="panel-title">
+                    <span>1. Vídeo de Origem & Marcação de Corte</span>
+                    <span id="duration-badge" class="duration-pill">Duração: 15.0s</span>
+                </div>
+
+                <div class="field">
+                    <label class="label">Caminho do Vídeo no Computador</label>
+                    <input type="text" id="video_path" class="input-text"
+                           value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
+                           placeholder="Ex: C:\\Users\\...\\gravacao_live.mp4">
+                </div>
+
+                <div class="row-2">
+                    <div class="field">
+                        <label class="label">Início do Corte (segundos)</label>
+                        <input type="number" step="0.1" id="inicio_s" class="input-text" value="0.0" oninput="updateDuration()">
+                    </div>
+                    <div class="field">
+                        <label class="label">Fim do Corte (segundos)</label>
+                        <input type="number" step="0.1" id="fim_s" class="input-text" value="15.0" oninput="updateDuration()">
+                    </div>
+                </div>
+
+                <div class="chips">
+                    <button class="chip" onclick="setClipDuration(15)">+15s</button>
+                    <button class="chip" onclick="setClipDuration(30)">+30s</button>
+                    <button class="chip" onclick="setClipDuration(45)">+45s</button>
+                    <button class="chip" onclick="setClipDuration(60)">+60s</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <span>2. Enquadramento Vertical (9:16)</span>
+                </div>
+                <div class="layout-options">
+                    <div id="card-solo" class="layout-card selected" onclick="selectLayout('solo')">
+                        <h4>Solo 9:16</h4>
+                        <p>Crop vertical centralizado inteligente</p>
+                    </div>
+                    <div id="card-stacked" class="layout-card" onclick="selectLayout('stacked')">
+                        <h4>Empilhado (Stacked)</h4>
+                        <p>Facecam no topo + Gameplay na base</p>
+                    </div>
+                </div>
+
+                <div id="stacked-config" style="display: none; margin-top: 16px; padding: 12px; background: #FAF9F8; border-radius: 8px;">
+                    <div class="row-2">
+                        <div class="field">
+                            <label class="label">Preset Facecam</label>
+                            <select id="facecam-preset" class="select-box" onchange="applyFacecamPreset()">
+                                <option value="top-left">Canto Superior Esquerdo</option>
+                                <option value="top-right">Canto Superior Direito</option>
+                                <option value="bottom-left">Canto Inferior Esquerdo</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="label">Altura Facecam Topo</label>
+                            <input type="number" id="h-facecam" class="input-text" value="720">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <span>3. Legendas Animadas & Gancho Viral</span>
+                </div>
+                <div class="row-2">
+                    <div class="field">
+                        <label class="label">Estilo da Legenda</label>
+                        <select id="subtitle_preset" class="select-box">
+                            <option value="viral_bounce">Viral Bounce (Amarelo & Preto)</option>
+                            <option value="minimal_clean">Minimal Clean (Calm White)</option>
+                            <option value="cinema_editorial">Cinema Editorial (Alto Contraste)</option>
+                        </select>
+                    </div>
+                    <div class="field" style="display:flex; align-items:center; margin-top: 24px;">
+                        <label style="font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="burn_subtitles" checked style="width: 18px; height: 18px;">
+                            Queimar legendas animadas no vídeo
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label class="label">Texto da Legenda / Gancho do Clipe</label>
+                    <textarea id="subtitle_text" class="textarea" rows="2"
+                              placeholder="Digite ou cole a frase de impacto que aparecerá na legenda...">ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL</textarea>
+                </div>
+
+                <button id="btn-render-action" class="btn-render" onclick="renderClipNow()">
+                    <span>🚀 RENDERIZAR CLIPE 9:16 AGORA</span>
+                </button>
+                <div id="render-status" style="margin-top: 12px; font-size: 13px; font-weight: 500; text-align: center; display: none;"></div>
+            </div>
         </div>
-        <div class="card">
-            <h2>Media Pre-Check</h2>
-            <div class="metric-value">ATIVO</div>
-            <div class="metric-label">Validação estrita de áudio e integridade</div>
-        </div>
-        <div class="card">
-            <h2>Pipeline Runner</h2>
-            <div class="metric-value">EM FILA</div>
-            <div class="metric-label">Processamento 9:16 e queima de legendas ASS/SRT</div>
+
+        <!-- Coluna Direita: Player e Biblioteca -->
+        <div>
+            <div class="panel" style="text-align: center;">
+                <div class="panel-title">
+                    <span>Pré-Visualização 9:16</span>
+                    <a id="btn-download-clip" href="#" download style="display: none; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none;">⬇️ Baixar Clipe</a>
+                </div>
+
+                <div class="phone-mockup">
+                    <video id="player-preview" controls playsinline>
+                        <source id="video-source" src="" type="video/mp4">
+                        Seu navegador não suporta reprodução de vídeo.
+                    </video>
+                    <div id="video-placeholder" class="no-video-placeholder">
+                        <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
+                        O clipe renderizado aparecerá aqui pronto para assistir e baixar.
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">
+                    <span>Clipes Renderizados Recentemente</span>
+                    <button onclick="loadClipsList()" style="background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; font-weight:600;">↻ Atualizar</button>
+                </div>
+                <div id="clips-container" class="clip-list">
+                    <div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Carregando clipes...</div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="actions-panel">
-        <h2>Operações de Clipping, Fila & Controle de Turno</h2>
-        <p style="font-size: 14px; color: var(--sub); margin-bottom: 16px;">
-            Acesse as rotas interativas da API OpenAPI, despache renderizações na fila ou inspecione o relatório de turno.
-        </p>
-        <a href="/docs" target="_blank" class="btn">Explorar Swagger OpenAPI</a>
-        <a href="/api/v1/shifts/handoff" target="_blank" class="btn btn-secondary">Ver Relatório de Turno Atual</a>
-        <a href="/api/v1/status" target="_blank" class="btn btn-secondary">Diagnóstico JSON</a>
-    </div>
+    <!-- TAB 2: PLANO DE CONTROLE & METRICAS -->
+    <div id="tab-control" style="display: none;">
+        <div class="grid-3">
+            <div class="metric-card">
+                <h3>Hardware Encoder</h3>
+                <div class="val">NVENC / QSV</div>
+                <div class="subtext">Aceleração por hardware com fallback x264</div>
+            </div>
+            <div class="metric-card">
+                <h3>Media Pre-Check</h3>
+                <div class="val">ATIVO</div>
+                <div class="subtext">Sonda estrita anti-desperdício de GPU</div>
+            </div>
+            <div class="metric-card">
+                <h3>Pipeline Runner</h3>
+                <div class="val">ONLINE</div>
+                <div class="subtext">Processamento de fila durável ponta a ponta</div>
+            </div>
+        </div>
 
-    <div class="actions-panel">
-        <h2>Guia de Execução no Terminal</h2>
-        <div class="terminal-box">
-# Iniciar o servidor de API e Dashboard local:
-uvicorn fastclipper.api.app:app --host 0.0.0.0 --port 8000
+        <div class="panel">
+            <div class="panel-title">Guia Operacional no Terminal</div>
+            <div class="terminal-box">
+# Iniciar o Estúdio Fast Clipper e abrir no navegador:
+python -m fastclipper studio
 
-# Executar worker contínuo de renderização da fila:
+# Executar worker contínuo de renderização:
 python -m fastclipper queue worker --run-pipeline
 
-# Executar diagnóstico preliminar de mídia:
+# Diagnóstico preliminar de vídeo fonte:
 python -m fastclipper precheck --video tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4
 
-# Simular live com buffer rolante e renderização 9:16:
-python -m fastclipper simulate --speed 2.0 --layout stacked
+# Documentação OpenAPI interativa (Swagger):
+Acesse: http://127.0.0.1:8000/docs
+            </div>
         </div>
     </div>
+
+    <script>
+        let currentLayout = 'solo';
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            if (tab === 'studio') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('tab-studio').style.display = 'grid';
+                document.getElementById('tab-control').style.display = 'none';
+            } else {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('tab-studio').style.display = 'none';
+                document.getElementById('tab-control').style.display = 'block';
+            }
+        }
+
+        function updateDuration() {
+            const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
+            const fim = parseFloat(document.getElementById('fim_s').value) || 0;
+            const dur = Math.max(0, fim - ini).toFixed(1);
+            document.getElementById('duration-badge').innerText = `Duração: ${dur}s`;
+        }
+
+        function setClipDuration(seconds) {
+            const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
+            document.getElementById('fim_s').value = (ini + seconds).toFixed(1);
+            updateDuration();
+        }
+
+        function selectLayout(mode) {
+            currentLayout = mode;
+            document.getElementById('card-solo').classList.toggle('selected', mode === 'solo');
+            document.getElementById('card-stacked').classList.toggle('selected', mode === 'stacked');
+            document.getElementById('stacked-config').style.display = mode === 'stacked' ? 'block' : 'none';
+        }
+
+        async function renderClipNow() {
+            const btn = document.getElementById('btn-render-action');
+            const statusDiv = document.getElementById('render-status');
+            const videoPath = document.getElementById('video_path').value.trim();
+            const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
+            const fimS = parseFloat(document.getElementById('fim_s').value) || 10;
+            const subPreset = document.getElementById('subtitle_preset').value;
+            const subText = document.getElementById('subtitle_text').value.trim();
+            const burnSubs = document.getElementById('burn_subtitles').checked;
+
+            if (!videoPath) {
+                alert('Informe o caminho do vídeo de origem.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Processando e Renderizando 9:16...</span>';
+            statusDiv.style.display = 'block';
+            statusDiv.style.color = 'var(--accent)';
+            statusDiv.innerText = 'Executando corte, ajuste 9:16 e queima de legendas...';
+
+            let facecamRect = null;
+            if (currentLayout === 'stacked') {
+                facecamRect = { x: 50, y: 50, w: 400, h: 300 };
+            }
+
+            const payload = {
+                video_path: videoPath,
+                inicio_s: inicioS,
+                fim_s: fimS,
+                layout: currentLayout,
+                facecam_rect: facecamRect,
+                subtitle_text: subText,
+                subtitle_preset: subPreset,
+                burn_subtitles: burnSubs
+            };
+
+            try {
+                const res = await fetch('/api/v1/studio/render-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    statusDiv.style.color = 'var(--ok)';
+                    statusDiv.innerText = `✅ Sucesso! Clipe renderizado em ${data.duration.toFixed(1)}s.`;
+                    playClipInMockup(data.download_url, data.filename);
+                    loadClipsList();
+                } else {
+                    statusDiv.style.color = 'var(--error)';
+                    statusDiv.innerText = `❌ Erro: ${data.detail || 'Falha na renderização'}`;
+                }
+            } catch (err) {
+                statusDiv.style.color = 'var(--error)';
+                statusDiv.innerText = `❌ Erro de conexão com o servidor: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🚀 RENDERIZAR CLIPE 9:16 AGORA</span>';
+            }
+        }
+
+        function playClipInMockup(url, filename) {
+            const player = document.getElementById('player-preview');
+            const source = document.getElementById('video-source');
+            const placeholder = document.getElementById('video-placeholder');
+            const dlBtn = document.getElementById('btn-download-clip');
+
+            placeholder.style.display = 'none';
+            player.style.display = 'block';
+            source.src = url;
+            player.load();
+            player.play().catch(() => {});
+
+            dlBtn.href = url;
+            dlBtn.style.display = 'inline';
+            dlBtn.download = filename || 'clipe_9x16.mp4';
+        }
+
+        async function loadClipsList() {
+            const container = document.getElementById('clips-container');
+            try {
+                const res = await fetch('/api/v1/studio/clips');
+                const clips = await res.json();
+                if (!clips || clips.length === 0) {
+                    container.innerHTML = '<div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Nenhum clipe renderizado ainda.</div>';
+                    return;
+                }
+
+                container.innerHTML = clips.map(c => `
+                    <div class="clip-item">
+                        <div>
+                            <strong>${c.filename}</strong><br>
+                            <span style="font-size: 11.5px; color: var(--muted);">${c.size_mb} MB</span>
+                        </div>
+                        <button class="clip-btn-play" onclick="playClipInMockup('${c.download_url}', '${c.filename}')">▶ Assistir</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                container.innerHTML = '<div style="font-size: 13px; color: var(--error); padding: 12px; text-align: center;">Erro ao carregar lista de clipes.</div>';
+            }
+        }
+
+        // Carrega lista ao iniciar
+        window.addEventListener('DOMContentLoaded', () => {
+            loadClipsList();
+        });
+    </script>
 </body>
 </html>
 """
+    return HTMLResponse(content=html_content, status_code=200)
     return HTMLResponse(content=html_content, status_code=200)
