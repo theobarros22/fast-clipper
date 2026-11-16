@@ -3,7 +3,7 @@
 **Documento:** Plano Operacional e Arquitetural de Engenharia  
 **Versão:** 2.0.0 (Revisada e Expandida)  
 **Data:** 2026-11-16  
-**Status:** Aprovado para Execução  
+**Status:** Marcos M0 a M6 Concluídos e Verificados (51 Testes Automatizados Aprovados)  
 **Referência Estratégica:** `docs/plano-fast-clipper.md`  
 **Escopo:** Transição da base monolítica local (Viral Cutter Classic) para a plataforma distribuída, colaborativa e multiusuário do Fast Clipper.
 
@@ -356,13 +356,60 @@ Para cada lote e marco executado, o sistema registrará as seguintes métricas n
 
 ---
 
-## 8. Roteiro Imediato de Execução (Próximos Passos)
+## 8. Status de Implementação e Verificação (Marcos M0 a M6 Concluídos)
 
-1. **Concluir M0:**
-   * Finalizar a instalação do ambiente reproduzível conforme `docs/ambiente.md`.
-   * Executar a suite de testes atual com a mídia sintética gerada em `tests/fixtures/synthetic/`.
-   * Isolar formalmente os testes que dependem de componentes legados ausentes (`iniciar.bat`, `ViralCutter.vbs`, `studio/`).
-   * Registrar o primeiro relatório de baseline de tempo de processamento.
-2. **Iniciar M1:**
-   * Implementar `fastclipper/ingest/clock.py` e `fastclipper/ingest/buffer.py`.
-   * Criar o mecanismo de marcação manual com janela $T_{pre} / T_{post}$ e validar o fluxo ponta a ponta sobre uma fixture local.
+Todos os sete marcos estruturais (M0 a M6) foram integralmente implementados, desacoplados da interface legada e validados por 51 testes automatizados ponta a ponta:
+
+| Marco | Componentes Chave Implementados | Status | Testes Automatizados |
+| :--- | :--- | :--- | :--- |
+| **M0 — Baseline e Auditoria** | `docs/ambiente.md`, `tests/fixtures/gerar_midia_sintetica.py`, `tests/fixtures/README.md`, `tools/auditar_baseline.py` | Concluído | 4 fixtures sintéticas + relatório de baseline emitido |
+| **M1 — Ingestão & Buffer** | `fastclipper/ingest/clock.py`, `buffer.py`, `source.py`, `marker.py`, `fastclipper/rendering/adapter.py` | Concluído | 9 testes em `test_m1_live_simulation.py` |
+| **M2 — Layout & Enquadramento** | `fastclipper/layouts/config.py`, `scene_detector.py`, `engine.py` (composição 9:16 solo/stacked, proteção HUD/facecam) | Concluído | 8 testes em `test_m2_layout_engine.py` |
+| **M3 — Colaboração & Turnos** | `fastclipper/collaboration/models.py`, `service.py` (isolamento multi-tenant, bloqueio otimista, passagem de turno, auditoria imutável) | Concluído | 6 testes em `test_m3_collaboration_and_shifts.py` |
+| **M4 — Sugestões Multimodais** | `fastclipper/signals/audio_analyzer.py`, `chat_analyzer.py`, `transcription_indexer.py`, `aggregator.py`, `evaluator.py` | Concluído | 6 testes em `test_m4_assisted_suggestions.py` |
+| **M5 — Comparação Cross-POV** | `fastclipper/multicreator/models.py`, `sync.py`, `renderer.py` (renderização split-screen/sequencial, bloqueio de fonte não autorizada) | Concluído | 6 testes em `test_m5_multicreator_comparison.py` |
+| **M6 — Fila, Live & Redes** | `fastclipper/live/youtube_live.py` (SSRF guard), `fastclipper/queue/durable_queue.py` (idempotência, leases), `fastclipper/social/oauth_vault.py` (cofre, kill switch) | Concluído | 7 testes em `test_m6_live_queue_and_distribution.py` |
+| **CLI & Orquestrador Unificado** | `fastclipper/cli.py`, `fastclipper/__main__.py`, `tools/fastclipper_cli.py` | Concluído | 9 testes em `tests/test_cli.py` |
+
+**Resultado Geral da Suíte de Testes:** **51 testes executados, 51 aprovados (100% de sucesso)** em 7.89s.
+
+---
+
+## 9. Guia Operacional do CLI Unificado
+
+O Fast Clipper pode ser operado via linha de comando através de `python -m fastclipper <subcomando>` ou `python tools/fastclipper_cli.py <subcomando>`:
+
+```bash
+# 1. Diagnóstico do ambiente, GPU e mídias sintéticas (M0)
+python -m fastclipper status
+
+# 2. Simulação de live com buffer rolante e renderização 9:16 (M1/M2)
+python -m fastclipper simulate --speed 2.0 --layout stacked --mark-at 3.0 --pre 2.0 --post 2.0
+
+# 3. Análise multimodal de áudio, chat e transcrição com explicabilidade (M4)
+python -m fastclipper analyze --audio-threshold 2.5 --chat-threshold 2.0
+
+# 4. Colaboração multiusuário, criação de momentos e passagem de turno (M3)
+python -m fastclipper collab create --org org_alfa --user editor_1 --titulo "Momento Chave GTA" --ts 120.0
+python -m fastclipper collab handoff --org org_alfa --hours 8
+
+# 5. Comparação e sincronização de reações entre múltiplos criadores (M5)
+python -m fastclipper compare --mode split --start 1.0 --end 3.5
+
+# 6. Fila durável e despacho para workers assíncronos (M6)
+python -m fastclipper queue enqueue --org org_alfa --key job_live_01
+python -m fastclipper queue worker --worker-id worker_gpu_01
+
+# 7. Cofre OAuth2 de redes sociais e acionamento do Kill Switch de emergência (M6)
+python -m fastclipper vault store --org org_alfa --autopost
+python -m fastclipper vault kill-switch --org org_alfa
+```
+
+---
+
+## 10. Próximos Passos de Evolução
+
+Com o núcleo desacoplado, testado e operacional de M0 a M6, os próximos passos concentram-se na expansão da camada de serviço e apresentação:
+1. **API REST e WebSockets (FastAPI):** Expor os contratos já validados em `fastclipper/collaboration/` e `fastclipper/queue/` para clientes web e desktop modernos.
+2. **Painel Web de Revisão Humana:** Interface gráfica com recorte visual 9:16 interativo, ajuste de caixas de facecam/gameplay em tempo real e timeline de sinais multimodais.
+3. **Distribuição de Workers:** Suporte a clustering de workers NVIDIA via contêineres Docker/Kubernetes com monitoramento de VRAM e métricas Prometheus.

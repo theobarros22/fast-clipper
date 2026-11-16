@@ -219,6 +219,23 @@ class SegmentedBuffer:
         temp_path.write_text(json.dumps(dados, indent=2), encoding="utf-8")
         shutil.move(str(temp_path), str(self.manifest_path))
 
+    def cleanup_all(self, force: bool = False) -> int:
+        """Remove todos os segmentos em disco e reinicializa o manifesto."""
+        with self._lock:
+            removidos = 0
+            for seg in list(self._segments.values()):
+                if not seg.locked_by or force:
+                    caminho = self.buffer_dir / seg.filename
+                    if caminho.exists():
+                        try:
+                            caminho.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                    self._segments.pop(seg.segment_id, None)
+                    removidos += 1
+            self._save_manifest_locked()
+            return removidos
+
     @staticmethod
     def _calcular_hash(caminho: Path) -> str:
         h = hashlib.sha256()
