@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 venv*/
+.venv/
 *.mp4
 *.mov
 *.webm
@@ -13,3 +14,5 @@ venv*/
 *.log
 data/
 outputs/
+tests/fixtures/manifesto_local.json
+tests/fixtures/synthetic/

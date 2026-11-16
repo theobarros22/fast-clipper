@@ -1,0 +1,142 @@
+{
+  "$schema": "https://fastclipper.local/schemas/manifesto_local_v1.json",
+  "versao_manifesto": "1.0.0",
+  "data_criacao": "2026-11-16T09:00:00-03:00",
+  "responsavel": "Operador de Baseline",
+  "ambiente_registro": {
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "driver": "610.88",
+    "python": "3.11.15",
+    "ffmpeg": "9.0-full_build"
+  },
+  "gravacoes": [
+    {
+      "id": "gtav_layout_01_gameplay_facecam",
+      "titulo": "GTA V Trecho 1 - Gameplay com Facecam Canto Superior Direito",
+      "caminho_local": "C:/FastClipperMidias/gtav_trecho_01.mp4",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "duracao_segundos": 120.0,
+      "resolucao_original": "1920x1080",
+      "fps": 60,
+      "layout_categoria": "gameplay_com_facecam",
+      "facecam_coordenadas": {
+        "x": 1440,
+        "y": 40,
+        "largura": 440,
+        "altura": 330
+      },
+      "gameplay_coordenadas": {
+        "x": 0,
+        "y": 0,
+        "largura": 1920,
+        "altura": 1080
+      },
+      "hud_zonas_protegidas": [
+        { "nome": "minimapa", "x": 30, "y": 800, "largura": 320, "altura": 250 },
+        { "nome": "armas_vida", "x": 1600, "y": 40, "largura": 280, "altura": 120 }
+      ],
+      "autorizacao": {
+        "titular": "Criador de Conteúdo Parceiro 01",
+        "canal_url": "https://youtube.com/@streamer_teste",
+        "termo_autorizacao_ref": "TERMO-FC-2026-001",
+        "data_autorizacao": "2026-11-10",
+        "restricoes": "Uso exclusivo para benchmark local de pesquisa e desenvolvimento do Fast Clipper"
+      },
+      "intervalos_rotulados": [
+        {
+          "intervalo_id": "gtav_01_int_01",
+          "inicio_s": 15.0,
+          "fim_s": 45.0,
+          "tipo": "util",
+          "descricao": "Acidente em alta velocidade com salto de rampa e gargalhada do criador",
+          "enquadramento_esperado": "empilhado_facecam_gameplay",
+          "conjunto": "calibracao"
+        },
+        {
+          "intervalo_id": "gtav_01_int_02",
+          "inicio_s": 65.0,
+          "fim_s": 95.0,
+          "tipo": "inutil",
+          "descricao": "Navegando no celular do jogo sem falar nada",
+          "enquadramento_esperado": "nenhum",
+          "conjunto": "avaliacao"
+        }
+      ]
+    },
+    {
+      "id": "gtav_layout_02_gameplay_sem_facecam",
+      "titulo": "GTA V Trecho 2 - Gameplay Cinematográfico Sem Câmera",
+      "caminho_local": "C:/FastClipperMidias/gtav_trecho_02.mp4",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "duracao_segundos": 120.0,
+      "resolucao_original": "1920x1080",
+      "fps": 60,
+      "layout_categoria": "gameplay_sem_facecam",
+      "facecam_coordenadas": null,
+      "gameplay_coordenadas": {
+        "x": 0,
+        "y": 0,
+        "largura": 1920,
+        "altura": 1080
+      },
+      "autorizacao": {
+        "titular": "Criador de Conteúdo Parceiro 02",
+        "canal_url": "https://youtube.com/@streamer_teste_2",
+        "termo_autorizacao_ref": "TERMO-FC-2026-002",
+        "data_autorizacao": "2026-11-12",
+        "restricoes": "Uso exclusivo para benchmark local"
+      },
+      "intervalos_rotulados": [
+        {
+          "intervalo_id": "gtav_02_int_01",
+          "inicio_s": 20.0,
+          "fim_s": 50.0,
+          "tipo": "util",
+          "descricao": "Tiroteio com helicóptero e explosão",
+          "enquadramento_esperado": "solo_gameplay_crop_central",
+          "conjunto": "calibracao"
+        }
+      ]
+    },
+    {
+      "id": "gtav_layout_03_troca_de_cena",
+      "titulo": "GTA V Trecho 3 - Transição entre Gameplay e Tela Cheia de Conversa",
+      "caminho_local": "C:/FastClipperMidias/gtav_trecho_03.mp4",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "duracao_segundos": 120.0,
+      "resolucao_original": "1920x1080",
+      "fps": 60,
+      "layout_categoria": "troca_de_cena",
+      "facecam_coordenadas": {
+        "x": 1440,
+        "y": 40,
+        "largura": 440,
+        "altura": 330
+      },
+      "gameplay_coordenadas": {
+        "x": 0,
+        "y": 0,
+        "largura": 1920,
+        "altura": 1080
+      },
+      "autorizacao": {
+        "titular": "Criador de Conteúdo Parceiro 01",
+        "canal_url": "https://youtube.com/@streamer_teste",
+        "termo_autorizacao_ref": "TERMO-FC-2026-001",
+        "data_autorizacao": "2026-11-10",
+        "restricoes": "Uso exclusivo para benchmark local"
+      },
+      "intervalos_rotulados": [
+        {
+          "intervalo_id": "gtav_03_int_01",
+          "inicio_s": 35.0,
+          "fim_s": 75.0,
+          "tipo": "util",
+          "descricao": "Streamer muda para cena Just Chatting (câmera cheia) para responder chat e volta ao jogo",
+          "enquadramento_esperado": "requer_revisao_ou_corte_hibrido",
+          "conjunto": "avaliacao"
+        }
+      ]
+    }
+  ]
+}
