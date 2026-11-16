@@ -35,6 +35,7 @@ def render_vertical_ffmpeg(
     ass_path: Optional[Path] = None,
     timeout_s: float = 600.0,
     cancel_event: Optional[threading.Event] = None,
+    normalize_audio: bool = False,
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -90,8 +91,9 @@ def render_vertical_ffmpeg(
 
     enc = encoder_manager.get_encoder()
     enc_args = encoder_manager.get_encoder_args(enc, width=target_w, height=target_h)
+    audio_args = ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"] if normalize_audio else []
     resolved_out = output_path.resolve()
-    full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
+    full_cmd = list(cmd) + enc_args + audio_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
     rc, stderr, cancelled = _run_ffmpeg_cancellable(
         full_cmd, cwd=cwd, timeout_s=timeout_s, cancel_event=cancel_event, output_path=resolved_out
     )
@@ -102,7 +104,7 @@ def render_vertical_ffmpeg(
         logger.warning("Hardware encoder '%s' falhou. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
         encoder_manager.mark_broken(enc)
         sw_args = encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=target_w, height=target_h)
-        full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
+        full_cmd = list(cmd) + sw_args + audio_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
         rc, stderr, cancelled = _run_ffmpeg_cancellable(
             full_cmd, cwd=cwd, timeout_s=timeout_s, cancel_event=cancel_event, output_path=resolved_out
         )

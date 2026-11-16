@@ -84,3 +84,21 @@ def test_studio_render_now_both_and_ui_selector():
     # Limpa os dois arquivos gerados no diretório de saída padrão
     for fname in (data["filename"], data["extra_outputs"][0]["filename"]):
         client.delete(f"/api/v1/studio/clips/{fname}")
+
+
+def test_render_with_normalize_audio(tmp_path):
+    if not FIXTURE_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    runner = PipelineRunner(queue=DurableTaskQueue(), output_dir=tmp_path)
+    res = runner.render_clip({
+        "video_path": str(FIXTURE_VIDEO),
+        "inicio_s": 0.0,
+        "fim_s": 2.0,
+        "layout": "solo",
+        "aspect_ratio": "9:16",
+        "burn_subtitles": False,
+        "normalize_audio": True,
+    })
+    assert res.success, res.error
+    assert Path(res.output_video_path).is_file()

@@ -470,6 +470,7 @@ class LiveClipSession:
                 "subtitles_are_absolute": False,
                 "subtitle_preset": opts.get("subtitle_preset", "viral_clean"),
                 "burn_subtitles": burn_subs and bool(subtitles_words),
+                "normalize_audio": bool(opts.get("normalize_audio", False)),
             }
             result = self.pipeline_runner.render_clip(params)
             if result.success and result.output_video_path:

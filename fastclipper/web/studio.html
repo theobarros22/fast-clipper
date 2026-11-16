@@ -596,10 +596,14 @@
                             <option value="cinema_editorial">Cinema Editorial (alto contraste)</option>
                         </select>
                     </div>
-                    <div class="field" style="display:flex; align-items:center; margin-top:22px;">
+                    <div class="field" style="display:flex; flex-direction:column; justify-content:center; gap:8px; margin-top:18px;">
                         <label for="burn_subtitles" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
                             <input type="checkbox" id="burn_subtitles" checked style="width:17px; height:17px;">
                             Queimar legendas no vídeo
+                        </label>
+                        <label for="normalize_audio" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="normalize_audio" style="width:17px; height:17px;">
+                            Normalizar áudio (-14 LUFS)
                         </label>
                     </div>
                 </div>
@@ -683,6 +687,7 @@
             <div class="row-2">
                 <div class="field">
                     <label class="label" for="res_clip_filename">Arquivo do clipe</label>
+                    <select id="res_clip_select" aria-label="Escolher clipe pronto" class="select-box" style="margin-bottom:6px;"></select>
                     <input type="text" id="res_clip_filename" class="input-text" placeholder="Ex: clip_abc123_9x16.mp4">
                 </div>
                 <div class="field">
@@ -1007,6 +1012,7 @@ http://127.0.0.1:8000/docs</div>
                 stacked_facecam_height: hFc ? parseInt(hFc.value, 10) || 720 : 720,
                 aspect_ratio: ar ? ar.value : '9:16',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
+                normalize_audio: document.getElementById('normalize_audio').checked,
                 subtitle_preset: subPreset ? subPreset.value : 'viral_bounce',
                 language: langEl ? langEl.value : 'pt',
             };
@@ -1388,6 +1394,7 @@ http://127.0.0.1:8000/docs</div>
                         subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
                         burn_subtitles: document.getElementById('burn_subtitles').checked,
+                        normalize_audio: document.getElementById('normalize_audio').checked,
                     }),
                 });
                 if (data.job_ids) pollBatchJobs(data.job_ids);
@@ -1466,6 +1473,7 @@ http://127.0.0.1:8000/docs</div>
                         subtitles_are_absolute: useRealWords,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
                         burn_subtitles: document.getElementById('burn_subtitles').checked,
+                        normalize_audio: document.getElementById('normalize_audio').checked,
                     }),
                 });
                 setStatus(`Clipe pronto (${data.duration.toFixed(1)}s): ${data.filename}`, 'idle');
@@ -1509,6 +1517,8 @@ http://127.0.0.1:8000/docs</div>
             dlBtn.href = url;
             dlBtn.style.display = 'inline';
             dlBtn.download = filename || 'clipe_9x16.mp4';
+            const resFile = document.getElementById('res_clip_filename');
+            if (resFile && filename) resFile.value = filename;
         }
 
         async function exportCurrentClipQuick() {
@@ -1606,6 +1616,14 @@ http://127.0.0.1:8000/docs</div>
             const container = document.getElementById('clips-container');
             try {
                 const clips = await api('/api/v1/studio/clips');
+                const resSel = document.getElementById('res_clip_select');
+                if (resSel) {
+                    resSel.textContent = '';
+                    resSel.appendChild(el('option', { value: '', textContent: '-- Selecionar clipe pronto --' }));
+                    for (const c of (clips || [])) {
+                        resSel.appendChild(el('option', { value: c.filename, textContent: `${c.filename} (${c.size_mb} MB)` }));
+                    }
+                }
                 container.textContent = '';
                 if (!clips || clips.length === 0) {
                     container.appendChild(el('div', { className: 'no-video-placeholder', textContent: 'Nenhum clipe renderizado ainda.' }));
@@ -1692,6 +1710,12 @@ http://127.0.0.1:8000/docs</div>
             });
             document.getElementById('btn-live-mark-post').addEventListener('click', () => markLiveClip(15, 15));
             document.getElementById('btn-cleanup-live').addEventListener('click', cleanupLiveBuffers);
+            const resSelEl = document.getElementById('res_clip_select');
+            if (resSelEl) {
+                resSelEl.addEventListener('change', (e) => {
+                    if (e.target.value) document.getElementById('res_clip_filename').value = e.target.value;
+                });
+            }
             document.getElementById('btn-copy-export-text').addEventListener('click', async () => {
                 const txt = (document.getElementById('export-copy-preview').textContent || '').trim();
                 if (!txt) return;

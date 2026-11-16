@@ -220,6 +220,7 @@ class StudioRenderRequest(BaseModel):
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
+    normalize_audio: bool = False
 
 
 class ImportSourceRequest(BaseModel):
@@ -252,6 +253,7 @@ class LiveStartRequest(BaseModel):
     burn_subtitles: bool = False
     subtitle_preset: str = "viral_clean"
     language: str = "pt"
+    normalize_audio: bool = False
 
 
 class LiveMarkRequest(BaseModel):
@@ -266,6 +268,7 @@ class LiveMarkRequest(BaseModel):
     burn_subtitles: Optional[bool] = None
     subtitle_preset: Optional[str] = None
     language: Optional[str] = None
+    normalize_audio: Optional[bool] = None
 
 
 class TranscribeRequest(BaseModel):
@@ -324,6 +327,7 @@ class BatchRenderRequest(BaseModel):
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
+    normalize_audio: bool = False
 
 
 class GenerateCopyRequest(BaseModel):
@@ -828,6 +832,7 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "subtitles_are_absolute": req.subtitles_are_absolute,
             "subtitle_preset": req.subtitle_preset,
             "burn_subtitles": req.burn_subtitles,
+            "normalize_audio": req.normalize_audio,
         }
         job = durable_queue.enqueue(
             org_id="org_default",
@@ -862,6 +867,7 @@ def studio_live_start(req: LiveStartRequest):
             "burn_subtitles": req.burn_subtitles,
             "subtitle_preset": req.subtitle_preset,
             "language": req.language,
+            "normalize_audio": req.normalize_audio,
         }
         session = live_manager.start_session(
             url=req.url,
@@ -906,6 +912,8 @@ def studio_live_mark(req: LiveMarkRequest):
         render_opts["subtitle_preset"] = req.subtitle_preset
     if req.language is not None:
         render_opts["language"] = req.language
+    if req.normalize_audio is not None:
+        render_opts["normalize_audio"] = req.normalize_audio
 
     try:
         return live_manager.mark_clip(
@@ -1029,6 +1037,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,
         "burn_subtitles": req.burn_subtitles,
+        "normalize_audio": req.normalize_audio,
     }
 
     result = pipeline_runner.render_clip(params)
