@@ -54,6 +54,20 @@ class SocialAccount:
     is_revoked: bool = False
     created_at: float = field(default_factory=time.time)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "account_id": self.account_id,
+            "org_id": self.org_id,
+            "platform": self.platform.value,
+            "account_name": self.account_name,
+            "scopes": self.scopes,
+            "autopost_enabled": self.autopost_enabled,
+            "daily_post_limit": self.daily_post_limit,
+            "posts_today": self.posts_today,
+            "is_revoked": self.is_revoked,
+            "created_at": self.created_at,
+        }
+
 
 class OAuthTokenVault:
     """Cofre criptográfico e despachante controlado de publicação social."""

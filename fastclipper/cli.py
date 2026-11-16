@@ -471,6 +471,19 @@ def cmd_vault(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Inicia o servidor de API FastAPI e Control Plane Web."""
+    import uvicorn
+    print("=" * 65)
+    print("FAST CLIPPER — CONTROL PLANE & REST API")
+    print("=" * 65)
+    print(f"Endereço: http://{args.host}:{args.port}")
+    print(f"Documentação Swagger: http://{args.host}:{args.port}/docs")
+    print("=" * 65)
+    uvicorn.run("fastclipper.api.app:app", host=args.host, port=args.port, reload=args.reload)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="fastclipper",
@@ -544,6 +557,13 @@ def main():
     p_v.add_argument("--org", type=str, default="org_alpha", help="ID da organização")
     p_v.add_argument("--autopost", action="store_true", help="Habilitar autopost na conta")
     p_v.set_defaults(func=cmd_vault)
+
+    # serve
+    p_serve = subparsers.add_parser("serve", help="Inicia servidor FastAPI e Dashboard Web")
+    p_serve.add_argument("--host", type=str, default="127.0.0.1", help="Endereço de bind (padrão: 127.0.0.1)")
+    p_serve.add_argument("--port", type=int, default=8000, help="Porta HTTP (padrão: 8000)")
+    p_serve.add_argument("--reload", action="store_true", help="Habilitar autoreload")
+    p_serve.set_defaults(func=cmd_serve)
 
     args = parser.parse_args()
     if hasattr(args, "func"):
