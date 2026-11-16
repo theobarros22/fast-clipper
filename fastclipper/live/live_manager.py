@@ -198,7 +198,7 @@ class LiveClipSession:
             self.ffmpeg_bin,
             "-hide_banner",
             "-loglevel",
-            "warning",
+            "error",
         ]
         if resolved_url.startswith(("http://", "https://")):
             cmd.extend(["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5"])
@@ -347,7 +347,11 @@ class LiveClipSession:
             if triggered_title and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
                 self._last_auto_clip_s = now_t
                 ini = max(0.0, now_t - self.auto_clip_duration_s)
-                self._render_window_worker(ini, now_t, triggered_title, self.default_render_opts, None)
+                threading.Thread(
+                    target=self._render_window_worker,
+                    args=(ini, now_t, triggered_title, self.default_render_opts, None),
+                    daemon=True,
+                ).start()
         finally:
             self._kw_busy = False
 
