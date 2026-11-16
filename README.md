@@ -1,5 +1,7 @@
 # Fast Clipper
 
+![Ilustração de referência para o projeto Fast Clipper](docs/images/gaming-illustration.jpg)
+
 [Português](#português) | [English](#english)
 
 ## Português
