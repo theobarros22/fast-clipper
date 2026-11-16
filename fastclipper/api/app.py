@@ -370,12 +370,21 @@ def system_status():
     ffmpeg_bin = shutil.which("ffmpeg")
     ffprobe_bin = shutil.which("ffprobe")
     active_encoder = encoder_manager.get_encoder()
+    cuda_available = False
+    try:
+        import ctranslate2
+
+        cuda_available = ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        pass
 
     return {
         "status": "healthy",
         "ffmpeg": {"installed": ffmpeg_bin is not None, "path": ffmpeg_bin},
         "ffprobe": {"installed": ffprobe_bin is not None, "path": ffprobe_bin},
         "hardware_encoder": active_encoder,
+        "nvenc_available": "nvenc" in str(active_encoder).lower(),
+        "cuda_available": cuda_available,
         "python_version": sys.version.split()[0],
         "time": time.time(),
     }
@@ -789,18 +798,59 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
         )
         job_ids.append(job.job_id)
 
+    pipeline_runner.clear_cancel()
+
     def _run_batch(count: int):
         for _ in range(count):
+            if pipeline_runner.is_cancelled():
+                break
             pipeline_runner.run_single_step()
 
     background_tasks.add_task(_run_batch, len(job_ids))
     return {"enqueued": len(job_ids), "job_ids": job_ids}
 
 
+@app.post("/api/v1/studio/cancel", tags=["Studio"])
+def studio_cancel_active_render():
+    """Solicita cancelamento imediato do FFmpeg e do lote em andamento."""
+    pipeline_runner.request_cancel()
+    return {"status": "cancelling", "cancelled": True}
+
+
+@app.get("/api/v1/studio/batch-status", tags=["Studio"])
+def studio_batch_status(ids: str = Query("")):
+    """Consulta o estado consolidado de uma lista de job_ids separados por vírgula."""
+    job_ids = [x.strip() for x in ids.split(",") if x.strip()]
+    jobs = []
+    done = 0
+    failed = 0
+    for jid in job_ids:
+        job = durable_queue.get_job(jid)
+        if not job:
+            continue
+        d = job.to_dict()
+        jobs.append(d)
+        if job.status in (JobStatus.APROVADO, JobStatus.PUBLICADO):
+            done += 1
+        elif job.status in (JobStatus.FALHOU, JobStatus.CANCELADO):
+            failed += 1
+    total = len(jobs)
+    active = max(0, total - done - failed)
+    return {
+        "total": total,
+        "done": done,
+        "failed": failed,
+        "active": active,
+        "cancelled": pipeline_runner.is_cancelled(),
+        "jobs": jobs,
+    }
+
+
 @app.post("/api/v1/studio/render-now", tags=["Studio"])
 def render_studio_clip_immediate(req: StudioRenderRequest):
     """Renderiza um clipe 9:16 imediatamente a partir dos parâmetros do Studio."""
     safe_path = validate_input_path(req.video_path)
+    pipeline_runner.clear_cancel()
 
     subtitles_payload = None
     subtitles_are_absolute = req.subtitles_are_absolute

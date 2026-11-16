@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode
 from fastclipper.layouts.engine import LayoutEngine
@@ -32,6 +34,7 @@ def render_vertical_ffmpeg(
     layout_config: Optional[ChannelLayoutConfig] = None,
     ass_path: Optional[Path] = None,
     timeout_s: float = 600.0,
+    cancel_event: Optional[threading.Event] = None,
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -84,25 +87,65 @@ def render_vertical_ffmpeg(
 
     enc = encoder_manager.get_encoder()
     enc_args = encoder_manager.get_encoder_args(enc, width=1080, height=1920)
-    full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path.resolve())]
-    try:
-        res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        logger.error("FFmpeg excedeu o tempo limite de %.0fs.", timeout_s)
+    resolved_out = output_path.resolve()
+    full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
+    rc, stderr, cancelled = _run_ffmpeg_cancellable(
+        full_cmd, cwd=cwd, timeout_s=timeout_s, cancel_event=cancel_event, output_path=resolved_out
+    )
+    if cancelled:
         return False
 
-    if res.returncode != 0 and enc != SOFTWARE_ENCODER:
+    if rc != 0 and enc != SOFTWARE_ENCODER:
         logger.warning("Hardware encoder '%s' falhou. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
         encoder_manager.mark_broken(enc)
         sw_args = encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
-        full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path.resolve())]
-        try:
-            res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            logger.error("FFmpeg (fallback x264) excedeu o tempo limite de %.0fs.", timeout_s)
+        full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
+        rc, stderr, cancelled = _run_ffmpeg_cancellable(
+            full_cmd, cwd=cwd, timeout_s=timeout_s, cancel_event=cancel_event, output_path=resolved_out
+        )
+        if cancelled:
             return False
 
-    if res.returncode != 0:
-        logger.error("Erro no FFmpeg: %s", res.stderr)
+    if rc != 0:
+        logger.error("Erro no FFmpeg: %s", stderr)
         return False
     return True
+
+
+def _run_ffmpeg_cancellable(
+    cmd: List[str],
+    cwd: Optional[str],
+    timeout_s: float,
+    cancel_event: Optional[threading.Event],
+    output_path: Path,
+) -> tuple[int, str, bool]:
+    """Executa FFmpeg com suporte a cancelamento ativo e timeout."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + max(1.0, float(timeout_s))
+
+    while proc.poll() is None:
+        if cancel_event is not None and cancel_event.is_set():
+            proc.terminate()
+            try:
+                proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2.0)
+            if output_path.exists():
+                try:
+                    output_path.unlink()
+                except OSError:
+                    pass
+            logger.info("Renderização cancelada pelo usuário; processo FFmpeg encerrado.")
+            return -1, "Cancelado pelo usuário.", True
+
+        if time.monotonic() > deadline:
+            proc.kill()
+            proc.wait(timeout=2.0)
+            logger.error("FFmpeg excedeu o tempo limite de %.0fs.", timeout_s)
+            return -1, "Timeout na execução do FFmpeg.", False
+
+        time.sleep(0.15)
+
+    _, stderr = proc.communicate()
+    return proc.returncode or 0, stderr or "", False

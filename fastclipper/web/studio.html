@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast Clipper — Estúdio Local de Clipping 9:16</title>
+    <title>Fast Clipper — Studio Local 9:16</title>
     <style>
         :root {
             --bg: #F8F7F5;
             --card: #FFFFFF;
             --ink: #191817;
             --sub: #66635F;
-            --muted: #9E9B95;
+            --muted: #8B8781;
             --line: #E8E6E1;
             --accent: #2563EB;
             --accent-hover: #1D4ED8;
@@ -20,10 +20,12 @@
             --ok: #16A34A;
             --ok-soft: #F0FDF4;
             --warn: #D97706;
+            --warn-soft: #FFFBEB;
             --error: #DC2626;
+            --error-soft: #FEF2F2;
             --radius-sm: 8px;
             --radius-md: 14px;
-            --radius-lg: 20px;
+            --radius-lg: 18px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -31,25 +33,27 @@
             background-color: var(--bg);
             color: var(--ink);
             line-height: 1.5;
-            padding: 24px 36px;
+            padding: 20px 28px 68px 28px;
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
             border-bottom: 1px solid var(--line);
-            padding-bottom: 20px;
-            margin-bottom: 24px;
+            padding-bottom: 16px;
+            margin-bottom: 18px;
         }
         .brand {
-            font-size: 22px;
+            font-size: 21px;
             font-weight: 700;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.4px;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .brand span { color: var(--accent); }
+        .brand span.accent { color: var(--accent); }
         .tag-studio {
             background: var(--ink);
             color: #FFF;
@@ -58,39 +62,44 @@
             text-transform: uppercase;
             padding: 3px 8px;
             border-radius: 6px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
         }
-        .status-badge {
-            display: inline-flex;
+        .chips-bar {
+            display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 12.5px;
-            font-family: monospace;
-            background: var(--ok-soft);
-            color: var(--ok);
-            border: 1px solid #BBF7D0;
-            padding: 6px 14px;
+            flex-wrap: wrap;
+        }
+        .hw-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            background: var(--card);
+            color: var(--sub);
+            border: 1px solid var(--line);
+            padding: 5px 11px;
             border-radius: 999px;
             font-weight: 600;
         }
-        .badge-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--ok);
-        }
+        .hw-chip.ok { background: var(--ok-soft); color: var(--ok); border-color: #BBF7D0; }
+        .hw-chip.err { background: var(--error-soft); color: var(--error); border-color: #FECACA; }
+        .hw-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
         .tabs {
             display: flex;
             gap: 8px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
         }
-        .tab-group { display: flex; gap: 8px; }
+        .tab-group { display: flex; gap: 8px; flex-wrap: wrap; }
         .tab-btn {
             background: transparent;
             border: 1px solid var(--line);
-            padding: 9px 18px;
+            padding: 8px 16px;
             border-radius: 999px;
             font-size: 13.5px;
             font-weight: 500;
@@ -106,42 +115,43 @@
         .shortcut-hint {
             font-size: 12px;
             color: var(--muted);
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
         }
         .studio-grid {
             display: grid;
-            grid-template-columns: 1.15fr 0.85fr;
-            gap: 28px;
+            grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+            gap: 24px;
             align-items: start;
         }
         .panel {
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: var(--radius-lg);
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            margin-bottom: 24px;
+            padding: 20px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+            margin-bottom: 20px;
         }
         .panel-title {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 600;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
+            flex-wrap: wrap;
         }
-        .field { margin-bottom: 18px; }
+        .field { margin-bottom: 14px; }
         .label {
             display: block;
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 600;
             color: var(--sub);
-            margin-bottom: 6px;
+            margin-bottom: 5px;
         }
         .input-text, .select-box, .textarea {
             width: 100%;
-            padding: 10px 14px;
+            padding: 9px 12px;
             font-size: 13.5px;
             border: 1px solid var(--line);
             border-radius: var(--radius-sm);
@@ -157,7 +167,13 @@
         .row-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 14px;
+            gap: 12px;
+        }
+        .row-3 {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr auto;
+            gap: 8px;
+            align-items: end;
         }
         .chips {
             display: flex;
@@ -165,23 +181,36 @@
             margin-top: 8px;
             flex-wrap: wrap;
         }
-        .chip {
-            background: #F0EEEA;
-            border: none;
-            font-size: 12px;
-            padding: 6px 12px;
-            border-radius: 6px;
+        .btn-sec, .chip {
+            background: #F1EFEA;
+            border: 1px solid var(--line);
+            font-size: 12.5px;
+            padding: 7px 12px;
+            border-radius: 8px;
             cursor: pointer;
-            color: var(--sub);
+            color: var(--ink);
             font-weight: 500;
+            transition: background 0.15s;
         }
-        .chip:hover { background: #E5E3DD; }
+        .btn-sec:hover, .chip:hover { background: #E7E4DD; }
+        .btn-sec:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-cancel {
+            background: var(--error-soft);
+            border: 1px solid #FECACA;
+            color: var(--error);
+            padding: 13px 18px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-cancel:disabled { opacity: 0.45; cursor: not-allowed; }
         .duration-pill {
             font-size: 12px;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
             background: var(--accent-soft);
             color: var(--accent);
-            padding: 3px 8px;
+            padding: 3px 9px;
             border-radius: 6px;
             font-weight: 600;
         }
@@ -193,7 +222,7 @@
         .layout-card {
             border: 2px solid var(--line);
             border-radius: var(--radius-md);
-            padding: 14px;
+            padding: 12px;
             cursor: pointer;
             text-align: center;
             transition: all 0.15s;
@@ -202,22 +231,26 @@
             border-color: var(--accent);
             background: var(--accent-soft);
         }
-        .layout-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .layout-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
         .layout-card p { font-size: 12px; color: var(--sub); }
+        .actions-row {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
         .btn-render {
-            width: 100%;
+            flex: 1;
             background: var(--accent);
             color: #FFFFFF;
             border: none;
-            padding: 14px;
+            padding: 13px 16px;
             border-radius: var(--radius-md);
-            font-size: 15px;
+            font-size: 14.5px;
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
             transition: background 0.15s ease;
         }
         .btn-render:hover { background: var(--accent-hover); }
@@ -235,34 +268,42 @@
         }
         .suggestion-meta { font-size: 12px; color: var(--sub); }
         .phone-mockup {
-            width: 270px;
-            height: 480px;
-            background: #000;
-            border-radius: 28px;
-            border: 8px solid #282828;
-            margin: 0 auto 20px auto;
+            width: 260px;
+            height: 462px;
+            background: #0E1013;
+            border-radius: 26px;
+            border: 7px solid #282828;
+            margin: 0 auto 14px auto;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 0 10px 28px rgba(0,0,0,0.14);
             position: relative;
         }
         .phone-mockup video { width: 100%; height: 100%; object-fit: cover; display: none; }
         .no-video-placeholder {
-            color: #888;
+            color: #9AA3B0;
             font-size: 13px;
             text-align: center;
             padding: 20px;
         }
-        .clip-list { max-height: 260px; overflow-y: auto; }
+        .export-bar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .clip-list { max-height: 250px; overflow-y: auto; }
         .clip-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 12px;
+            padding: 9px 10px;
             border-bottom: 1px solid var(--line);
             font-size: 13px;
+            gap: 8px;
         }
         .clip-item:hover { background: #F9F9F8; }
         .clip-btn-play {
@@ -273,49 +314,84 @@
             border-radius: 999px;
             font-size: 12px;
             cursor: pointer;
+            white-space: nowrap;
         }
         .grid-3 {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 24px;
+            gap: 16px;
+            margin-bottom: 20px;
         }
         .metric-card {
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: var(--radius-md);
-            padding: 20px;
+            padding: 18px;
         }
         .metric-card h3 {
-            font-size: 13px;
+            font-size: 12.5px;
             color: var(--sub);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
+            letter-spacing: 0.4px;
+            margin-bottom: 6px;
         }
-        .metric-card .val { font-size: 26px; font-weight: 700; font-family: monospace; }
+        .metric-card .val { font-size: 24px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
         .metric-card .subtext { font-size: 12px; color: var(--muted); margin-top: 4px; }
         .terminal-box {
             background: #191817;
             color: #F6F5F3;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
             font-size: 12.5px;
             padding: 16px;
             border-radius: 10px;
             white-space: pre-wrap;
             line-height: 1.6;
         }
+        /* Barra de status fixa no rodapé */
+        #fc-statusbar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 40px;
+            background: #191817;
+            color: #ECEAE6;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 24px;
+            font-size: 12.5px;
+            border-top: 1px solid #2E2D2A;
+            z-index: 100;
+        }
+        #fc-statusbar .s-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+        #fc-statusbar.busy .s-dot { background: #60A5FA; }
+        #fc-statusbar.err .s-dot { background: #F87171; }
+        #fc-statusbar.warn .s-dot { background: #FBBF24; }
+        #fc-statusbar .s-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #fc-statusbar .s-progress { width: 140px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; display: none; }
+        #fc-statusbar .s-progress > i { display: block; height: 100%; background: #60A5FA; width: 0%; transition: width 0.2s; }
+
+        @media (max-width: 1200px) {
+            body { padding: 16px 18px 64px 18px; }
+            .studio-grid { grid-template-columns: 1fr 320px; gap: 18px; }
+        }
+        @media (max-width: 860px) {
+            .studio-grid, .grid-3, .row-2, .row-3 { grid-template-columns: 1fr; }
+            .shortcut-hint { display: none; }
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="brand">
-            Fast<span>Clipper</span>
+            Fast<span class="accent">Clipper</span>
             <span class="tag-studio">Studio Local</span>
         </div>
-        <div class="status-badge">
-            <div class="badge-dot"></div>
-            RTX 3050 CUDA + SQLITE WAL
+        <div class="chips-bar" id="topbar-chips">
+            <span class="hw-chip" id="chip-ffmpeg"><span class="dot"></span>FFmpeg</span>
+            <span class="hw-chip" id="chip-gpu"><span class="dot"></span>Hardware</span>
+            <span class="hw-chip ok"><span class="dot"></span>SQLite WAL</span>
         </div>
     </div>
 
@@ -338,11 +414,33 @@
                 </div>
 
                 <div class="field">
-                    <label class="label">Caminho do Vídeo no Computador (em data/ ou tests/fixtures/)</label>
+                    <label class="label">Fontes Registradas no Projeto</label>
+                    <select id="sources-select" class="select-box" onchange="applySelectedSource()">
+                        <option value="">-- Escolha uma fonte importada ou informe o caminho abaixo --</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label class="label">Caminho do Vídeo (em data/ ou tests/fixtures/)</label>
                     <input type="text" id="video_path" class="input-text"
                            value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
                            placeholder="Ex: data/projects/meu_canal/source/live.mp4">
                 </div>
+
+                <details style="margin-bottom:14px; padding:10px 12px; background:#FAF9F7; border:1px solid var(--line); border-radius:8px;">
+                    <summary style="cursor:pointer; font-size:12.5px; font-weight:600; color:var(--sub);">Baixar VOD autorizado via link (yt-dlp)</summary>
+                    <div class="row-3" style="margin-top:10px;">
+                        <div>
+                            <label class="label">URL do Vídeo</label>
+                            <input type="text" id="dl_url" class="input-text" placeholder="https://www.youtube.com/watch?v=...">
+                        </div>
+                        <div>
+                            <label class="label">Referência de Autorização</label>
+                            <input type="text" id="dl_auth_ref" class="input-text" placeholder="Ex: CANAL-PROPRIO-01">
+                        </div>
+                        <button type="button" id="btn-download-vod" class="btn-sec" onclick="downloadSourceUrl()">Baixar VOD</button>
+                    </div>
+                </details>
 
                 <div class="row-2">
                     <div class="field">
@@ -356,17 +454,17 @@
                 </div>
 
                 <div class="chips">
-                    <button class="chip" onclick="setClipDuration(15)">+15s</button>
-                    <button class="chip" onclick="setClipDuration(30)">+30s</button>
-                    <button class="chip" onclick="setClipDuration(45)">+45s</button>
-                    <button class="chip" onclick="setClipDuration(60)">+60s</button>
-                    <button class="chip" onclick="suggestMoments()">✨ Sugerir Melhores Momentos</button>
+                    <button type="button" class="chip" onclick="setClipDuration(15)">+15s</button>
+                    <button type="button" class="chip" onclick="setClipDuration(30)">+30s</button>
+                    <button type="button" class="chip" onclick="setClipDuration(45)">+45s</button>
+                    <button type="button" class="chip" onclick="setClipDuration(60)">+60s</button>
+                    <button type="button" class="chip" onclick="suggestMoments()">Sugerir Melhores Momentos</button>
                 </div>
 
                 <div id="suggestions-wrap" style="display:none; margin-top:14px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
                         <strong style="font-size:13px;">Sugestões Ranqueadas (alinhadas por frase)</strong>
-                        <button class="chip" onclick="renderBatchSelected()">⚡ Renderizar Selecionados em Lote</button>
+                        <button type="button" class="chip" onclick="renderBatchSelected()">Renderizar Selecionados em Lote</button>
                     </div>
                     <div id="suggestions-list"></div>
                 </div>
@@ -379,7 +477,7 @@
                 <div class="layout-options">
                     <div id="card-solo" class="layout-card selected" onclick="selectLayout('solo')">
                         <h4>Solo 9:16</h4>
-                        <p>Crop vertical centralizado inteligente</p>
+                        <p>Crop vertical centralizado</p>
                     </div>
                     <div id="card-stacked" class="layout-card" onclick="selectLayout('stacked')">
                         <h4>Empilhado (Stacked)</h4>
@@ -387,7 +485,7 @@
                     </div>
                 </div>
 
-                <div id="stacked-config" style="display: none; margin-top: 16px; padding: 14px; background: #FAF9F8; border-radius: 10px; border: 1px solid var(--line);">
+                <div id="stacked-config" style="display: none; margin-top: 14px; padding: 14px; background: #FAF9F8; border-radius: 10px; border: 1px solid var(--line);">
                     <div class="row-2">
                         <div class="field">
                             <label class="label">Preset de Canal Salvo</label>
@@ -399,23 +497,27 @@
                             <label class="label">Salvar Preset do Canal</label>
                             <div style="display:flex; gap:6px;">
                                 <input type="text" id="preset-channel-name" class="input-text" placeholder="Ex: Canal Principal">
-                                <button type="button" class="chip" onclick="saveCurrentPreset()" style="white-space:nowrap;">💾 Salvar</button>
+                                <button type="button" class="chip" onclick="saveCurrentPreset()" style="white-space:nowrap;">Salvar</button>
                             </div>
                         </div>
                     </div>
 
                     <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-                        <button type="button" class="chip" onclick="loadSourcePreview()">🖼️ Extrair Frame & Detectar Facecam</button>
-                        <button type="button" class="chip" onclick="previewLayout916()">📱 Pré-visualizar 9:16</button>
+                        <button type="button" class="chip" onclick="loadSourcePreview()">Extrair Frame e Detectar Facecam</button>
+                        <button type="button" class="chip" onclick="previewLayout916()">Pré-visualizar 9:16</button>
                     </div>
 
-                    <div id="facecam-canvas-wrap" style="display:none; margin-bottom:10px; position:relative;">
+                    <div id="facecam-canvas-wrap" style="display:none; margin-bottom:10px;">
                         <p style="font-size:11.5px; color:var(--sub); margin-bottom:6px;">Arraste o mouse sobre a imagem para marcar a caixa da Facecam:</p>
                         <canvas id="facecam-canvas" style="width:100%; border-radius:8px; border:1px solid var(--line); cursor:crosshair;"></canvas>
                     </div>
 
+                    <div id="layout-preview-wrap" style="display:none; margin-bottom:10px; text-align:center;">
+                        <img id="layout-preview-img" alt="Prévia 9:16" style="max-height:240px; border-radius:8px; border:1px solid var(--line);">
+                    </div>
+
                     <div class="row-2">
-                        <div class="field" style="margin-bottom:6px;">
+                        <div class="field" style="margin-bottom:4px;">
                             <label class="label">Facecam (x, y, w, h)</label>
                             <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">
                                 <input type="number" id="fc_x" class="input-text" value="50" title="X">
@@ -424,7 +526,7 @@
                                 <input type="number" id="fc_h" class="input-text" value="300" title="Altura">
                             </div>
                         </div>
-                        <div class="field" style="margin-bottom:6px;">
+                        <div class="field" style="margin-bottom:4px;">
                             <label class="label">Altura Facecam Topo (px)</label>
                             <input type="number" id="h-facecam" class="input-text" value="720">
                         </div>
@@ -434,23 +536,22 @@
 
             <div class="panel">
                 <div class="panel-title">
-                    <span>3. Transcrição Real & Legendas Animadas</span>
-                    <button type="button" class="chip" onclick="transcribeVideo()">🎙️ Transcrever Áudio (Whisper GPU)</button>
+                    <span>3. Transcrição e Legendas Animadas</span>
+                    <button type="button" id="btn-transcribe" class="chip" onclick="transcribeVideo()">Transcrever Áudio (Whisper GPU)</button>
                 </div>
-                <div id="transcribe-status" style="display:none; font-size:12px; margin-bottom:10px; color:var(--accent);"></div>
 
                 <div class="row-2">
                     <div class="field">
                         <label class="label">Estilo da Legenda</label>
                         <select id="subtitle_preset" class="select-box">
-                            <option value="viral_bounce">Viral Bounce (Amarelo & Preto)</option>
-                            <option value="minimal_clean">Minimal Clean (Calm White)</option>
+                            <option value="viral_bounce">Viral Bounce (Amarelo e Preto)</option>
+                            <option value="minimal_clean">Minimal Clean (Branco Limpo)</option>
                             <option value="cinema_editorial">Cinema Editorial (Alto Contraste)</option>
                         </select>
                     </div>
-                    <div class="field" style="display:flex; align-items:center; margin-top: 24px;">
+                    <div class="field" style="display:flex; align-items:center; margin-top: 22px;">
                         <label style="font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="burn_subtitles" checked style="width: 18px; height: 18px;">
+                            <input type="checkbox" id="burn_subtitles" checked style="width: 17px; height: 17px;">
                             Queimar legendas animadas no vídeo
                         </label>
                     </div>
@@ -462,10 +563,14 @@
                               placeholder="Transcreva o áudio ou digite o texto...">ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL</textarea>
                 </div>
 
-                <button id="btn-render-action" class="btn-render" onclick="renderClipNow()">
-                    <span>🚀 RENDERIZAR CLIPE 9:16 AGORA</span>
-                </button>
-                <div id="render-status" style="margin-top: 12px; font-size: 13px; font-weight: 500; text-align: center; display: none;"></div>
+                <div class="actions-row">
+                    <button type="button" id="btn-render-action" class="btn-render" onclick="renderClipNow()">
+                        Renderizar clipe 9:16
+                    </button>
+                    <button type="button" id="btn-cancel-action" class="btn-cancel" onclick="cancelActiveRender()" disabled>
+                        Cancelar
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -474,7 +579,7 @@
             <div class="panel" style="text-align: center;">
                 <div class="panel-title">
                     <span>Pré-Visualização 9:16</span>
-                    <a id="btn-download-clip" href="#" download style="display: none; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none;">⬇️ Baixar Clipe</a>
+                    <a id="btn-download-clip" href="#" download style="display: none; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: none;">Baixar MP4</a>
                 </div>
 
                 <div class="phone-mockup">
@@ -483,18 +588,27 @@
                         Seu navegador não suporta reprodução de vídeo.
                     </video>
                     <div id="video-placeholder" class="no-video-placeholder">
-                        <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
-                        O clipe renderizado aparecerá aqui pronto para assistir e baixar.
+                        O clipe renderizado aparecerá aqui pronto para assistir, exportar pacote e baixar.
                     </div>
                 </div>
-                <button id="btn-export-quick" type="button" class="chip" onclick="exportCurrentClipQuick()" style="display:none; margin:0 auto;">📦 Exportar Pacote (MP4 + SRT + Capa + Copy)</button>
-                <div id="export-quick-status" style="font-size:12px; margin-top:8px; color:var(--ok); display:none;"></div>
+
+                <div id="export-quick-bar" class="export-bar" style="display:none;">
+                    <select id="export-platform" class="select-box" style="width:auto; min-width:140px;">
+                        <option value="tiktok">TikTok</option>
+                        <option value="shorts">YouTube Shorts</option>
+                        <option value="reels">Instagram Reels</option>
+                        <option value="youtube">YouTube</option>
+                    </select>
+                    <button id="btn-export-quick" type="button" class="btn-sec" onclick="exportCurrentClipQuick()">
+                        Exportar Pacote (MP4 + SRT + Capa + Copy)
+                    </button>
+                </div>
             </div>
 
             <div class="panel">
                 <div class="panel-title">
                     <span>Clipes Renderizados Recentemente</span>
-                    <button onclick="loadClipsList()" style="background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; font-weight:600;">↻ Atualizar</button>
+                    <button type="button" onclick="loadClipsList()" class="btn-sec" style="padding:4px 10px;">Atualizar</button>
                 </div>
                 <div id="clips-container" class="clip-list">
                     <div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Carregando clipes...</div>
@@ -550,7 +664,7 @@
                     <input type="number" step="0.01" id="res_revenue" class="input-text" value="0.00">
                 </div>
             </div>
-            <button type="button" class="btn-render" onclick="saveClipResult()">💾 Salvar Resultado</button>
+            <button type="button" class="btn-render" onclick="saveClipResult()">Salvar Resultado</button>
         </div>
 
         <div class="panel">
@@ -559,23 +673,23 @@
         </div>
     </div>
 
-    <!-- TAB 3: PLANO DE CONTROLE & METRICAS -->
+    <!-- TAB 3: CONTROL PLANE & METRICAS -->
     <div id="tab-control" style="display: none;">
         <div class="grid-3">
             <div class="metric-card">
                 <h3>Hardware Encoder</h3>
-                <div class="val">NVENC / QSV</div>
-                <div class="subtext">Aceleração por hardware com fallback x264</div>
+                <div id="ctrl-encoder" class="val">--</div>
+                <div class="subtext">Aceleração com fallback x264</div>
             </div>
             <div class="metric-card">
-                <h3>Media Pre-Check</h3>
-                <div class="val">ATIVO</div>
-                <div class="subtext">Sonda estrita anti-desperdício de GPU</div>
+                <h3>CUDA / Whisper</h3>
+                <div id="ctrl-cuda" class="val">--</div>
+                <div class="subtext">Transcrição com cache SHA-256</div>
             </div>
             <div class="metric-card">
-                <h3>Fila SQLite WAL</h3>
-                <div class="val">PERSISTENTE</div>
-                <div class="subtext">Leasing atômico e recuperação após reinício</div>
+                <h3>FFmpeg / FFprobe</h3>
+                <div id="ctrl-ffmpeg" class="val">--</div>
+                <div class="subtext">Validação estrita pós-render</div>
             </div>
         </div>
 
@@ -592,9 +706,15 @@ python -m fastclipper queue worker --run-pipeline
 python -m fastclipper precheck --video tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4
 
 # Documentação OpenAPI interativa (Swagger):
-Acesse: http://127.0.0.1:8000/docs
+http://127.0.0.1:8000/docs
             </div>
         </div>
+    </div>
+
+    <div id="fc-statusbar" role="status" aria-live="polite">
+        <span class="s-dot"></span>
+        <span class="s-text" id="sb-text">Pronto. Escolha uma fonte ou clique em Renderizar clipe 9:16.</span>
+        <span class="s-progress" id="sb-progress"><i id="sb-progress-bar"></i></span>
     </div>
 
     <script>
@@ -607,6 +727,22 @@ Acesse: http://127.0.0.1:8000/docs
         let srcHeight = 1080;
         let dragStart = null;
         let savedPresetsMap = {};
+        let batchPollTimer = null;
+
+        function setStatus(text, state = 'idle', progressPct = null) {
+            const bar = document.getElementById('fc-statusbar');
+            const label = document.getElementById('sb-text');
+            const progWrap = document.getElementById('sb-progress');
+            const progFill = document.getElementById('sb-progress-bar');
+            bar.className = state === 'idle' ? '' : state;
+            label.innerText = text;
+            if (progressPct !== null) {
+                progWrap.style.display = 'block';
+                progFill.style.width = `${Math.max(0, Math.min(100, progressPct))}%`;
+            } else {
+                progWrap.style.display = 'none';
+            }
+        }
 
         function switchTab(tab) {
             const btns = document.querySelectorAll('.tab-btn');
@@ -624,6 +760,7 @@ Acesse: http://127.0.0.1:8000/docs
             } else {
                 btns[2].classList.add('active');
                 document.getElementById('tab-control').style.display = 'block';
+                loadSystemStatus();
             }
         }
 
@@ -671,18 +808,103 @@ Acesse: http://127.0.0.1:8000/docs
             ctx.fillRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
         }
 
+        async function loadSystemStatus() {
+            try {
+                const res = await fetch('/api/v1/status');
+                if (!res.ok) return;
+                const d = await res.json();
+                const chipFfmpeg = document.getElementById('chip-ffmpeg');
+                const chipGpu = document.getElementById('chip-gpu');
+                if (d.ffmpeg && d.ffmpeg.installed) {
+                    chipFfmpeg.className = 'hw-chip ok';
+                    chipFfmpeg.innerHTML = '<span class="dot"></span>FFmpeg OK';
+                } else {
+                    chipFfmpeg.className = 'hw-chip err';
+                    chipFfmpeg.innerHTML = '<span class="dot"></span>FFmpeg ausente';
+                }
+                if (d.cuda_available || d.nvenc_available) {
+                    chipGpu.className = 'hw-chip ok';
+                    chipGpu.innerHTML = `<span class="dot"></span>${d.hardware_encoder} + CUDA`;
+                } else {
+                    chipGpu.className = 'hw-chip';
+                    chipGpu.innerHTML = `<span class="dot"></span>${d.hardware_encoder || 'CPU'}`;
+                }
+                document.getElementById('ctrl-encoder').innerText = d.hardware_encoder || '--';
+                document.getElementById('ctrl-cuda').innerText = d.cuda_available ? 'ATIVO' : 'CPU';
+                document.getElementById('ctrl-ffmpeg').innerText = (d.ffmpeg && d.ffmpeg.installed) ? 'OK' : 'AUSENTE';
+            } catch (e) {}
+        }
+
+        async function loadSourcesList() {
+            try {
+                const res = await fetch('/api/v1/studio/sources');
+                if (!res.ok) return;
+                const items = await res.json();
+                const sel = document.getElementById('sources-select');
+                sel.innerHTML = '<option value="">-- Escolha uma fonte importada ou informe o caminho abaixo --</option>';
+                for (const s of items) {
+                    const opt = document.createElement('option');
+                    opt.value = s.file_path;
+                    opt.textContent = `${s.title} (${s.duration_s ? s.duration_s.toFixed(1) + 's' : 'local'})`;
+                    sel.appendChild(opt);
+                }
+            } catch (e) {}
+        }
+
+        function applySelectedSource() {
+            const val = document.getElementById('sources-select').value;
+            if (val) {
+                document.getElementById('video_path').value = val;
+                transcribedWords = null;
+                setStatus(`Fonte selecionada: ${val}`);
+            }
+        }
+
+        async function downloadSourceUrl() {
+            const url = document.getElementById('dl_url').value.trim();
+            const authRef = document.getElementById('dl_auth_ref').value.trim();
+            if (!url || !authRef) {
+                setStatus('Informe a URL e a referência de autorização para baixar.', 'warn');
+                return;
+            }
+            const btn = document.getElementById('btn-download-vod');
+            btn.disabled = true;
+            setStatus('Baixando VOD autorizado via yt-dlp...', 'busy', 25);
+            try {
+                const res = await fetch('/api/v1/studio/sources/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, authorization_ref: authRef })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById('video_path').value = data.file_path;
+                    transcribedWords = null;
+                    await loadSourcesList();
+                    setStatus(`Download concluído: ${data.title}`, 'idle');
+                } else {
+                    setStatus(`Erro no download: ${data.detail || 'falha'}`, 'err');
+                }
+            } catch (err) {
+                setStatus(`Erro de conexão: ${err.message}`, 'err');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         async function loadSourcePreview() {
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
-            if (!videoPath) return alert('Informe o caminho do vídeo.');
+            if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
 
+            setStatus('Extraindo frame e detectando Facecam...', 'busy');
             const res = await fetch('/api/v1/studio/preview-frame', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ video_path: videoPath, timestamp_s: inicioS, detect_facecam: true })
             });
             const data = await res.json();
-            if (!res.ok) return alert(data.detail || 'Falha ao extrair frame.');
+            if (!res.ok) return setStatus(data.detail || 'Falha ao extrair frame.', 'err');
 
             srcWidth = data.source_width;
             srcHeight = data.source_height;
@@ -702,6 +924,7 @@ Acesse: http://127.0.0.1:8000/docs
                 canvas.width = 640;
                 canvas.height = Math.round(640 * (srcHeight / srcWidth));
                 drawFacecamCanvas();
+                setStatus('Frame carregado. Arraste sobre a imagem para ajustar a Facecam.', 'idle');
             };
             previewImgObj.src = data.image_url;
         }
@@ -709,6 +932,7 @@ Acesse: http://127.0.0.1:8000/docs
         async function previewLayout916() {
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
+            setStatus('Gerando prévia 9:16...', 'busy');
             const res = await fetch('/api/v1/studio/preview-layout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -721,9 +945,11 @@ Acesse: http://127.0.0.1:8000/docs
             });
             const data = await res.json();
             if (res.ok && data.image_url) {
-                window.open(data.image_url, '_blank');
+                document.getElementById('layout-preview-wrap').style.display = 'block';
+                document.getElementById('layout-preview-img').src = data.image_url;
+                setStatus('Prévia 9:16 atualizada.', 'idle');
             } else {
-                alert(data.detail || 'Erro ao gerar prévia 9:16.');
+                setStatus(data.detail || 'Erro ao gerar prévia 9:16.', 'err');
             }
         }
 
@@ -759,11 +985,12 @@ Acesse: http://127.0.0.1:8000/docs
             if (p.stacked_facecam_height) {
                 document.getElementById('h-facecam').value = p.stacked_facecam_height;
             }
+            setStatus(`Preset "${p.name}" aplicado.`, 'idle');
         }
 
         async function saveCurrentPreset() {
             const name = document.getElementById('preset-channel-name').value.trim();
-            if (!name) return alert('Informe um nome para o canal/preset.');
+            if (!name) return setStatus('Informe um nome para o preset do canal.', 'warn');
             const channelId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
             const res = await fetch('/api/v1/studio/presets', {
                 method: 'POST',
@@ -779,16 +1006,16 @@ Acesse: http://127.0.0.1:8000/docs
             if (res.ok) {
                 await loadPresetsList();
                 document.getElementById('channel-preset-select').value = channelId;
+                setStatus(`Preset "${name}" salvo no SQLite.`, 'idle');
             }
         }
 
         async function transcribeVideo() {
             const videoPath = document.getElementById('video_path').value.trim();
-            const st = document.getElementById('transcribe-status');
-            if (!videoPath) return alert('Informe o caminho do vídeo.');
-            st.style.display = 'block';
-            st.style.color = 'var(--accent)';
-            st.innerText = '⏳ Transcrevendo áudio com faster-whisper (RTX 3050 GPU)...';
+            if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
+            const btn = document.getElementById('btn-transcribe');
+            btn.disabled = true;
+            setStatus('Transcrevendo áudio com faster-whisper (CUDA)...', 'busy', 35);
             try {
                 const res = await fetch('/api/v1/studio/transcribe', {
                     method: 'POST',
@@ -801,21 +1028,21 @@ Acesse: http://127.0.0.1:8000/docs
                     if (data.full_text) {
                         document.getElementById('subtitle_text').value = data.full_text;
                     }
-                    st.style.color = 'var(--ok)';
-                    st.innerText = `✅ ${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache SQLite' : 'GPU'}).`;
+                    setStatus(`${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache SQLite' : 'GPU'}).`, 'idle');
                 } else {
-                    st.style.color = 'var(--error)';
-                    st.innerText = `❌ ${data.detail || 'Falha na transcrição'}`;
+                    setStatus(data.detail || 'Falha na transcrição.', 'err');
                 }
             } catch (err) {
-                st.style.color = 'var(--error)';
-                st.innerText = `❌ Erro: ${err.message}`;
+                setStatus(`Erro na transcrição: ${err.message}`, 'err');
+            } finally {
+                btn.disabled = false;
             }
         }
 
         async function suggestMoments() {
             const videoPath = document.getElementById('video_path').value.trim();
-            if (!videoPath) return alert('Informe o caminho do vídeo.');
+            if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
+            setStatus('Analisando áudio e palavras-chave para sugerir cortes...', 'busy');
             const res = await fetch('/api/v1/studio/suggest-moments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -827,7 +1054,7 @@ Acesse: http://127.0.0.1:8000/docs
                 })
             });
             const data = await res.json();
-            if (!res.ok) return alert(data.detail || 'Erro ao sugerir momentos.');
+            if (!res.ok) return setStatus(data.detail || 'Erro ao sugerir momentos.', 'err');
             lastSuggestions = data.suggestions || [];
             const wrap = document.getElementById('suggestions-wrap');
             const list = document.getElementById('suggestions-list');
@@ -845,6 +1072,7 @@ Acesse: http://127.0.0.1:8000/docs
                     <button type="button" class="chip" onclick="applySuggestion(${idx})">Usar</button>
                 </div>
             `).join('');
+            setStatus(`${lastSuggestions.length} sugestões alinhadas por frase.`, 'idle');
         }
 
         function applySuggestion(idx) {
@@ -853,16 +1081,20 @@ Acesse: http://127.0.0.1:8000/docs
             document.getElementById('inicio_s').value = s.inicio_s;
             document.getElementById('fim_s').value = s.fim_s;
             updateDuration();
+            setStatus(`Corte selecionado: ${s.inicio_s}s a ${s.fim_s}s.`, 'idle');
         }
 
         async function renderBatchSelected() {
             const videoPath = document.getElementById('video_path').value.trim();
             const checks = [...document.querySelectorAll('.sug-check:checked')];
-            if (checks.length === 0) return alert('Selecione ao menos uma sugestão.');
+            if (checks.length === 0) return setStatus('Selecione ao menos uma sugestão.', 'warn');
             const items = checks.map(ch => {
                 const s = lastSuggestions[parseInt(ch.dataset.idx, 10)];
                 return { inicio_s: s.inicio_s, fim_s: s.fim_s };
             });
+
+            document.getElementById('btn-cancel-action').disabled = false;
+            setStatus(`Enfileirando ${items.length} cortes em lote...`, 'busy', 5);
             const res = await fetch('/api/v1/studio/render-batch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -878,20 +1110,52 @@ Acesse: http://127.0.0.1:8000/docs
                 })
             });
             const data = await res.json();
-            if (res.ok) {
-                const st = document.getElementById('render-status');
-                st.style.display = 'block';
-                st.style.color = 'var(--accent)';
-                st.innerText = `⚡ ${data.enqueued} clipes enviados para a fila de render em lote.`;
-                setTimeout(loadClipsList, 2500);
+            if (res.ok && data.job_ids) {
+                pollBatchJobs(data.job_ids);
             } else {
-                alert(data.detail || 'Erro no lote.');
+                document.getElementById('btn-cancel-action').disabled = true;
+                setStatus(data.detail || 'Erro ao iniciar lote.', 'err');
             }
+        }
+
+        function pollBatchJobs(jobIds) {
+            if (batchPollTimer) clearInterval(batchPollTimer);
+            const idsParam = jobIds.join(',');
+            batchPollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/v1/studio/batch-status?ids=${encodeURIComponent(idsParam)}`);
+                    if (!res.ok) return;
+                    const st = await res.json();
+                    const pct = st.total > 0 ? Math.round(((st.done + st.failed) / st.total) * 100) : 0;
+                    if (st.active > 0 && !st.cancelled) {
+                        setStatus(`Lote em andamento: ${st.done}/${st.total} concluídos...`, 'busy', Math.max(8, pct));
+                    } else {
+                        clearInterval(batchPollTimer);
+                        batchPollTimer = null;
+                        document.getElementById('btn-cancel-action').disabled = true;
+                        await loadClipsList();
+                        if (st.cancelled) {
+                            setStatus(`Lote cancelado. ${st.done} clipe(s) concluído(s) foram mantidos.`, 'warn');
+                        } else {
+                            setStatus(`Lote finalizado: ${st.done} concluído(s), ${st.failed} falha(s).`, st.failed > 0 ? 'warn' : 'idle');
+                        }
+                    }
+                } catch (e) {}
+            }, 800);
+        }
+
+        async function cancelActiveRender() {
+            const btnCancel = document.getElementById('btn-cancel-action');
+            btnCancel.disabled = true;
+            setStatus('Cancelando processo FFmpeg ativo...', 'warn');
+            try {
+                await fetch('/api/v1/studio/cancel', { method: 'POST' });
+            } catch (e) {}
         }
 
         async function renderClipNow() {
             const btn = document.getElementById('btn-render-action');
-            const statusDiv = document.getElementById('render-status');
+            const btnCancel = document.getElementById('btn-cancel-action');
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
             const fimS = parseFloat(document.getElementById('fim_s').value) || 10;
@@ -900,15 +1164,14 @@ Acesse: http://127.0.0.1:8000/docs
             const burnSubs = document.getElementById('burn_subtitles').checked;
 
             if (!videoPath) {
-                alert('Informe o caminho do vídeo de origem.');
+                setStatus('Informe o caminho do vídeo de origem.', 'warn');
                 return;
             }
 
             btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Processando e Renderizando 9:16...</span>';
-            statusDiv.style.display = 'block';
-            statusDiv.style.color = 'var(--accent)';
-            statusDiv.innerText = 'Executando corte, ajuste 9:16 e queima de legendas...';
+            btnCancel.disabled = false;
+            btn.innerText = 'Renderizando 9:16...';
+            setStatus('Cortando, aplicando layout 9:16 e validando via FFprobe...', 'busy', 40);
 
             const facecamRect = currentLayout === 'stacked' ? getFacecamRect() : null;
             const useRealWords = Array.isArray(transcribedWords) && transcribedWords.length > 0;
@@ -935,20 +1198,18 @@ Acesse: http://127.0.0.1:8000/docs
                 const data = await res.json();
 
                 if (res.ok && data.success) {
-                    statusDiv.style.color = 'var(--ok)';
-                    statusDiv.innerText = `✅ Sucesso! Clipe renderizado em ${data.duration.toFixed(1)}s.`;
+                    setStatus(`Clipe renderizado (${data.duration.toFixed(1)}s): ${data.filename}`, 'idle');
                     playClipInMockup(data.download_url, data.filename);
                     loadClipsList();
                 } else {
-                    statusDiv.style.color = 'var(--error)';
-                    statusDiv.innerText = `❌ Erro: ${data.detail || 'Falha na renderização'}`;
+                    setStatus(`Erro: ${data.detail || 'Falha na renderização'}`, 'err');
                 }
             } catch (err) {
-                statusDiv.style.color = 'var(--error)';
-                statusDiv.innerText = `❌ Erro de conexão com o servidor: ${err.message}`;
+                setStatus(`Erro de conexão: ${err.message}`, 'err');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '<span>🚀 RENDERIZAR CLIPE 9:16 AGORA</span>';
+                btnCancel.disabled = true;
+                btn.innerText = 'Renderizar clipe 9:16';
             }
         }
 
@@ -957,12 +1218,12 @@ Acesse: http://127.0.0.1:8000/docs
             const source = document.getElementById('video-source');
             const placeholder = document.getElementById('video-placeholder');
             const dlBtn = document.getElementById('btn-download-clip');
-            const expBtn = document.getElementById('btn-export-quick');
+            const expBar = document.getElementById('export-quick-bar');
 
             currentClipFilename = filename || null;
             if (currentClipFilename) {
                 document.getElementById('res_clip_filename').value = currentClipFilename;
-                expBtn.style.display = 'inline-block';
+                expBar.style.display = 'flex';
             }
 
             placeholder.style.display = 'none';
@@ -978,12 +1239,14 @@ Acesse: http://127.0.0.1:8000/docs
 
         async function exportCurrentClipQuick() {
             if (!currentClipFilename) return;
-            const st = document.getElementById('export-quick-status');
+            const platform = document.getElementById('export-platform').value;
             const txt = document.getElementById('subtitle_text').value.trim();
+            setStatus(`Gerando pacote para ${platform.toUpperCase()}...`, 'busy', 50);
+
             const resCopy = await fetch('/api/v1/studio/generate-copy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transcript_text: txt || 'Corte da live', platform: 'tiktok' })
+                body: JSON.stringify({ transcript_text: txt || 'Corte da live', platform })
             });
             const copy = await resCopy.json();
             const resExp = await fetch('/api/v1/studio/export-package', {
@@ -991,7 +1254,7 @@ Acesse: http://127.0.0.1:8000/docs
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     clip_filename: currentClipFilename,
-                    platform: 'tiktok',
+                    platform,
                     title: copy.title,
                     description: copy.description,
                     hashtags: copy.hashtags,
@@ -999,19 +1262,16 @@ Acesse: http://127.0.0.1:8000/docs
                 })
             });
             const data = await resExp.json();
-            st.style.display = 'block';
             if (resExp.ok) {
-                st.style.color = 'var(--ok)';
-                st.innerText = `✅ Pacote salvo em: ${data.package_dir}`;
+                setStatus(`Pacote salvo em: ${data.package_dir}`, 'idle');
             } else {
-                st.style.color = 'var(--error)';
-                st.innerText = `❌ ${data.detail || 'Erro ao exportar pacote'}`;
+                setStatus(data.detail || 'Erro ao exportar pacote.', 'err');
             }
         }
 
         async function saveClipResult() {
             const clipFilename = document.getElementById('res_clip_filename').value.trim();
-            if (!clipFilename) return alert('Informe o nome do arquivo do clipe.');
+            if (!clipFilename) return setStatus('Informe o nome do arquivo do clipe.', 'warn');
             const res = await fetch('/api/v1/studio/results', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1023,7 +1283,10 @@ Acesse: http://127.0.0.1:8000/docs
                     layout_mode: currentLayout
                 })
             });
-            if (res.ok) loadResults();
+            if (res.ok) {
+                await loadResults();
+                setStatus('Resultado registrado no SQLite.', 'idle');
+            }
         }
 
         async function loadResults() {
@@ -1061,7 +1324,7 @@ Acesse: http://127.0.0.1:8000/docs
                             <strong>${c.filename}</strong><br>
                             <span style="font-size: 11.5px; color: var(--muted);">${c.size_mb} MB</span>
                         </div>
-                        <button class="clip-btn-play" onclick="playClipInMockup('${c.download_url}', '${c.filename}')">▶ Assistir</button>
+                        <button type="button" class="clip-btn-play" onclick="playClipInMockup('${c.download_url}', '${c.filename}')">Assistir</button>
                     </div>
                 `).join('');
             } catch (e) {
@@ -1082,6 +1345,8 @@ Acesse: http://127.0.0.1:8000/docs
         });
 
         window.addEventListener('DOMContentLoaded', () => {
+            loadSystemStatus();
+            loadSourcesList();
             loadClipsList();
             loadPresetsList();
             const canvas = document.getElementById('facecam-canvas');

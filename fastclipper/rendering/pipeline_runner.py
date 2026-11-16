@@ -85,6 +85,18 @@ class PipelineRunner:
             ffprobe_bin=self.ffprobe_bin,
         )
         self.encoder_manager = HardwareEncoderManager(ffmpeg_bin=self.ffmpeg_bin)
+        self._cancel_event = threading.Event()
+
+    def request_cancel(self) -> None:
+        """Sinaliza cancelamento imediato da renderização e do lote atual."""
+        self._cancel_event.set()
+
+    def clear_cancel(self) -> None:
+        """Limpa o sinal de cancelamento antes de iniciar novo processamento."""
+        self._cancel_event.clear()
+
+    def is_cancelled(self) -> bool:
+        return self._cancel_event.is_set()
 
     def render_clip(self, params: Dict[str, Any], job_id: Optional[str] = None) -> JobExecutionResult:
         """Executa a cadeia de renderização de um clipe 9:16 a partir de um vídeo fonte."""
@@ -330,6 +342,7 @@ class PipelineRunner:
             source_path=source_path,
             layout_config=layout_config,
             ass_path=ass_path,
+            cancel_event=self._cancel_event,
         )
 
     def _parse_subtitles_data(
