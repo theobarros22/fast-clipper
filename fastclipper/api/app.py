@@ -26,6 +26,7 @@ from fastclipper.collaboration.service import (
     PermissionDeniedError,
     TenantAccessViolationError,
 )
+from fastclipper.export import PackageExporter, generate_post_copy
 from fastclipper.ingest.precheck import MediaPrechecker
 from fastclipper.ingest.vod_ingest import VodIngestor
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangle
@@ -113,6 +114,7 @@ prechecker = MediaPrechecker()
 vod_ingestor = VodIngestor(store=sqlite_store, projects_root=ROOT / "data" / "projects")
 whisper_service = WhisperTranscriptionService(store=sqlite_store, model_name="small")
 pipeline_runner = PipelineRunner(queue=durable_queue, output_dir=ROOT / "data" / "output_clips")
+package_exporter = PackageExporter(exports_root=ROOT / "data" / "exports")
 
 # Registra organização e usuário padrão para demonstração imediata
 collab_service.register_organization(org_id="org_default", nome="Agência Alfa", slug="alfa")
@@ -211,6 +213,36 @@ class StudioRenderRequest(BaseModel):
     burn_subtitles: bool = True
 
 
+class GenerateCopyRequest(BaseModel):
+    transcript_text: str
+    platform: str = "tiktok"
+    channel_name: Optional[str] = None
+    use_llm: bool = False
+
+
+class ExportPackageRequest(BaseModel):
+    clip_filename: str
+    platform: str = "tiktok"
+    title: str
+    description: str
+    hashtags: List[str] = []
+    words: Optional[List[Dict[str, Any]]] = None
+    cover_timestamp_s: float = 0.5
+
+
+class ClipResultRequest(BaseModel):
+    clip_filename: str
+    platform: str
+    post_url: Optional[str] = None
+    views_24h: int = 0
+    views_7d: int = 0
+    revenue_brl: float = 0.0
+    layout_mode: Optional[str] = None
+    subtitle_preset: Optional[str] = None
+    channel_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class ImportSourceRequest(BaseModel):
     video_path: str
     authorization_ref: str
@@ -279,6 +311,36 @@ class BatchRenderRequest(BaseModel):
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
+
+
+class GenerateCopyRequest(BaseModel):
+    transcript_text: str
+    platform: str = "tiktok"
+    channel_name: Optional[str] = None
+    use_llm: bool = False
+
+
+class ExportPackageRequest(BaseModel):
+    clip_filename: str
+    platform: str = "tiktok"
+    title: str
+    description: str
+    hashtags: List[str] = []
+    words: Optional[List[Dict[str, Any]]] = None
+    cover_timestamp_s: float = 0.5
+
+
+class ClipResultRequest(BaseModel):
+    clip_filename: str
+    platform: str
+    post_url: Optional[str] = None
+    views_24h: int = 0
+    views_7d: int = 0
+    revenue_brl: float = 0.0
+    layout_mode: Optional[str] = None
+    subtitle_preset: Optional[str] = None
+    channel_id: Optional[str] = None
+    notes: Optional[str] = None
 
 
 # Helper para extrair contexto de autenticação de headers
@@ -797,3 +859,65 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
 def get_dashboard():
     studio_html = ROOT / "fastclipper" / "web" / "studio.html"
     return HTMLResponse(content=studio_html.read_text(encoding="utf-8"), status_code=200)
+
+
+# -----------------------------------------------------------------------------
+# Rotas de Exportação de Pacotes e Métricas de Receita (Sprint 4)
+# -----------------------------------------------------------------------------
+
+@app.post("/api/v1/studio/generate-copy", tags=["Exportação & Receita"])
+def studio_generate_copy(req: GenerateCopyRequest):
+    """Gera título, descrição, gancho e hashtags por plataforma (offline ou LLM opcional)."""
+    return generate_post_copy(
+        transcript_text=req.transcript_text,
+        platform=req.platform,
+        channel_name=req.channel_name,
+        use_llm=req.use_llm,
+    )
+
+
+@app.post("/api/v1/studio/export-package", tags=["Exportação & Receita"])
+def studio_export_package(req: ExportPackageRequest):
+    """Empacota MP4 + SRT + capa.jpg + texto pronto para postar em data/exports/."""
+    if not req.clip_filename or "/" in req.clip_filename or "\\" in req.clip_filename or ".." in req.clip_filename:
+        raise HTTPException(status_code=403, detail="Nome de arquivo inválido.")
+    out_dir = pipeline_runner.output_dir.resolve()
+    clip_path = (out_dir / req.clip_filename).resolve()
+    if clip_path.parent != out_dir or not clip_path.is_file():
+        raise HTTPException(status_code=404, detail="Clipe renderizado não encontrado.")
+
+    return package_exporter.export_package(
+        clip_path=clip_path,
+        platform=req.platform,
+        title=req.title,
+        description=req.description,
+        hashtags=req.hashtags,
+        words=req.words,
+        cover_timestamp_s=req.cover_timestamp_s,
+    )
+
+
+@app.post("/api/v1/studio/results", tags=["Exportação & Receita"])
+def studio_save_result(req: ClipResultRequest):
+    """Registra views e receita de um clipe publicado no SQLite."""
+    return sqlite_store.save_clip_result(
+        clip_filename=req.clip_filename,
+        platform=req.platform,
+        post_url=req.post_url,
+        views_24h=req.views_24h,
+        views_7d=req.views_7d,
+        revenue_brl=req.revenue_brl,
+        layout_mode=req.layout_mode,
+        subtitle_preset=req.subtitle_preset,
+        channel_id=req.channel_id,
+        notes=req.notes,
+    )
+
+
+@app.get("/api/v1/studio/results", tags=["Exportação & Receita"])
+def studio_get_results():
+    """Lista resultados registrados e resumo acumulado de views e receita."""
+    return {
+        "results": sqlite_store.list_clip_results(),
+        "summary": sqlite_store.get_results_summary(),
+    }

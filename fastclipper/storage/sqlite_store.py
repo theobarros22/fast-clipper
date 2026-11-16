@@ -116,6 +116,22 @@ class SQLiteStore:
                     stacked_facecam_height INTEGER NOT NULL DEFAULT 720,
                     updated_at REAL NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS clip_results (
+                    result_id TEXT PRIMARY KEY,
+                    clip_filename TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    post_url TEXT,
+                    views_24h INTEGER NOT NULL DEFAULT 0,
+                    views_7d INTEGER NOT NULL DEFAULT 0,
+                    revenue_brl REAL NOT NULL DEFAULT 0.0,
+                    layout_mode TEXT,
+                    subtitle_preset TEXT,
+                    channel_id TEXT,
+                    notes TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
                 """
             )
 
@@ -188,6 +204,75 @@ class SQLiteStore:
             "stacked_facecam_height": int(row["stacked_facecam_height"]),
             "updated_at": float(row["updated_at"]),
         }
+
+    # --- Resultados e Receita ---
+
+    def save_clip_result(
+        self,
+        clip_filename: str,
+        platform: str,
+        post_url: Optional[str] = None,
+        views_24h: int = 0,
+        views_7d: int = 0,
+        revenue_brl: float = 0.0,
+        layout_mode: Optional[str] = None,
+        subtitle_preset: Optional[str] = None,
+        channel_id: Optional[str] = None,
+        notes: Optional[str] = None,
+        result_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        rid = result_id or f"res_{uuid.uuid4().hex[:10]}"
+        now = time.time()
+        with self._lock, self.connect() as conn:
+            existing = conn.execute("SELECT created_at FROM clip_results WHERE result_id = ?", (rid,)).fetchone()
+            created_at = float(existing["created_at"]) if existing else now
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO clip_results (
+                    result_id, clip_filename, platform, post_url, views_24h, views_7d,
+                    revenue_brl, layout_mode, subtitle_preset, channel_id, notes,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    rid, clip_filename, platform.lower(), post_url, int(views_24h), int(views_7d),
+                    float(revenue_brl), layout_mode, subtitle_preset, channel_id, notes,
+                    created_at, now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM clip_results WHERE result_id = ?", (rid,)).fetchone()
+            return dict(row)
+
+    def list_clip_results(self) -> List[Dict[str, Any]]:
+        with self._lock, self.connect() as conn:
+            rows = conn.execute("SELECT * FROM clip_results ORDER BY updated_at DESC").fetchall()
+            return [dict(r) for r in rows]
+
+    def get_results_summary(self) -> Dict[str, Any]:
+        with self._lock, self.connect() as conn:
+            totals = conn.execute(
+                """
+                SELECT COUNT(*) AS total_posts,
+                       COALESCE(SUM(views_24h), 0) AS total_views_24h,
+                       COALESCE(SUM(views_7d), 0) AS total_views_7d,
+                       COALESCE(SUM(revenue_brl), 0.0) AS total_revenue_brl
+                FROM clip_results
+                """
+            ).fetchone()
+            by_platform = conn.execute(
+                """
+                SELECT platform, COUNT(*) AS posts,
+                       COALESCE(SUM(views_7d), 0) AS views_7d,
+                       COALESCE(SUM(revenue_brl), 0.0) AS revenue_brl
+                FROM clip_results
+                GROUP BY platform
+                ORDER BY revenue_brl DESC, views_7d DESC
+                """
+            ).fetchall()
+            return {
+                "totals": dict(totals),
+                "by_platform": [dict(r) for r in by_platform],
+            }
 
     # --- Fontes ---
 
