@@ -29,6 +29,8 @@ from fastclipper.collaboration.service import (
 from fastclipper.export import PackageExporter, generate_post_copy
 from fastclipper.ingest.precheck import MediaPrechecker
 from fastclipper.ingest.vod_ingest import VodIngestor
+from fastclipper.live.live_manager import LiveManager
+from fastclipper.live.youtube_live import SecuritySSRFError
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangle
 from fastclipper.layouts.engine import LayoutEngine
 from fastclipper.layouts.facecam_detector import FacecamDetector
@@ -114,6 +116,7 @@ prechecker = MediaPrechecker()
 vod_ingestor = VodIngestor(store=sqlite_store, projects_root=ROOT / "data" / "projects")
 whisper_service = WhisperTranscriptionService(store=sqlite_store, model_name="small")
 pipeline_runner = PipelineRunner(queue=durable_queue, output_dir=ROOT / "data" / "output_clips")
+live_manager = LiveManager(projects_root=ROOT / "data" / "projects", pipeline_runner=pipeline_runner)
 package_exporter = PackageExporter(exports_root=ROOT / "data" / "exports")
 
 # Registra organização e usuário padrão para demonstração imediata
@@ -226,6 +229,32 @@ class DownloadSourceRequest(BaseModel):
     authorization_ref: str
     project_id: str = "proj_default"
     title: Optional[str] = None
+
+
+class LiveStartRequest(BaseModel):
+    url: str
+    segment_duration_s: float = 10.0
+    retention_seconds: float = 1800.0
+    auto_clip: bool = False
+    auto_clip_duration_s: float = 25.0
+    layout: str = "stacked"
+    facecam_rect: Optional[Dict[str, Any]] = None
+    gameplay_rect: Optional[Dict[str, Any]] = None
+    stacked_facecam_height: int = 720
+    burn_subtitles: bool = False
+    subtitle_preset: str = "viral_clean"
+
+
+class LiveMarkRequest(BaseModel):
+    pre_s: float = 25.0
+    post_s: float = 0.0
+    titulo: str = "Corte ao Vivo"
+    layout: Optional[str] = None
+    facecam_rect: Optional[Dict[str, Any]] = None
+    gameplay_rect: Optional[Dict[str, Any]] = None
+    stacked_facecam_height: Optional[int] = None
+    burn_subtitles: Optional[bool] = None
+    subtitle_preset: Optional[str] = None
 
 
 class TranscribeRequest(BaseModel):
@@ -805,6 +834,73 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
 
     background_tasks.add_task(_run_batch, len(job_ids))
     return {"enqueued": len(job_ids), "job_ids": job_ids}
+
+
+@app.post("/api/v1/studio/live/start", tags=["Studio Live"])
+def studio_live_start(req: LiveStartRequest):
+    """Inicia captura contínua ao vivo (YouTube Live ou X/Twitter Live) em buffer segmentado."""
+    try:
+        render_opts = {
+            "layout": req.layout,
+            "facecam_rect": req.facecam_rect,
+            "gameplay_rect": req.gameplay_rect,
+            "stacked_facecam_height": req.stacked_facecam_height,
+            "burn_subtitles": req.burn_subtitles,
+            "subtitle_preset": req.subtitle_preset,
+        }
+        session = live_manager.start_session(
+            url=req.url,
+            segment_duration_s=req.segment_duration_s,
+            retention_seconds=req.retention_seconds,
+            auto_clip=req.auto_clip,
+            auto_clip_duration_s=req.auto_clip_duration_s,
+            default_render_opts=render_opts,
+        )
+        return session.get_status()
+    except SecuritySSRFError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Falha ao iniciar live: {exc}")
+
+
+@app.get("/api/v1/studio/live/status", tags=["Studio Live"])
+def studio_live_status():
+    """Retorna o estado atual da transmissão ao vivo e clipes gerados."""
+    return live_manager.get_status()
+
+
+@app.post("/api/v1/studio/live/mark", tags=["Studio Live"])
+def studio_live_mark(req: LiveMarkRequest):
+    """Cria um corte instantâneo dos últimos segundos do buffer ou agenda marcação com janela posterior."""
+    render_opts: Dict[str, Any] = {}
+    if req.layout is not None:
+        render_opts["layout"] = req.layout
+    if req.facecam_rect is not None:
+        render_opts["facecam_rect"] = req.facecam_rect
+    if req.gameplay_rect is not None:
+        render_opts["gameplay_rect"] = req.gameplay_rect
+    if req.stacked_facecam_height is not None:
+        render_opts["stacked_facecam_height"] = req.stacked_facecam_height
+    if req.burn_subtitles is not None:
+        render_opts["burn_subtitles"] = req.burn_subtitles
+    if req.subtitle_preset is not None:
+        render_opts["subtitle_preset"] = req.subtitle_preset
+
+    try:
+        return live_manager.mark_clip(
+            pre_s=req.pre_s,
+            post_s=req.post_s,
+            titulo=req.titulo,
+            render_opts=render_opts or None,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/studio/live/stop", tags=["Studio Live"])
+def studio_live_stop():
+    """Encerra a captura ao vivo atual."""
+    return live_manager.stop_session()
 
 
 @app.post("/api/v1/studio/cancel", tags=["Studio"])

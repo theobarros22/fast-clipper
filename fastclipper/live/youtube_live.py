@@ -5,6 +5,7 @@ Adaptador de ingestão de YouTube Live com proteção contra SSRF e reconexão r
 import ipaddress
 import logging
 import re
+import shutil
 import socket
 import urllib.parse
 from dataclasses import dataclass
@@ -38,6 +39,13 @@ class YouTubeLiveIngestor:
         "youtu.be",
         "m.youtube.com",
         "manifest.googlevideo.com",
+        "googlevideo.com",
+        "x.com",
+        "www.x.com",
+        "twitter.com",
+        "www.twitter.com",
+        "mobile.twitter.com",
+        "video.twimg.com",
     ]
 
     def __init__(
@@ -86,8 +94,15 @@ class YouTubeLiveIngestor:
         if not dominio_valido:
             raise SecuritySSRFError(
                 f"Domínio não homologado para ingestão ao vivo: {hostname}. "
-                f"Apenas fontes oficiais do YouTube Live são permitidas."
+                f"Apenas fontes oficiais do YouTube e X (Twitter) são permitidas."
             )
+
+    @staticmethod
+    def detect_platform(url: str) -> str:
+        hostname = (urllib.parse.urlparse(url).hostname or "").lower()
+        if any(hostname == d or hostname.endswith("." + d) for d in ("x.com", "twitter.com", "video.twimg.com")):
+            return "x"
+        return "youtube"
 
     def check_disk_space_gb(self) -> float:
         """Verifica espaço livre em disco no diretório do buffer."""

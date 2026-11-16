@@ -431,6 +431,30 @@
                     </div>
                 </div>
 
+                <details class="details-box" id="live-clipper-box">
+                    <summary>Clipar transmissão ao vivo (YouTube / X)</summary>
+                    <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
+                        <div class="row-2">
+                            <div>
+                                <label class="label" for="live_url">URL da live (YouTube ou X)</label>
+                                <input type="text" id="live_url" class="input-text" placeholder="https://www.youtube.com/watch?v=... ou https://x.com/...">
+                            </div>
+                            <div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap;">
+                                <label class="checkbox-row" style="margin:0 8px 6px 0;">
+                                    <input type="checkbox" id="live_autoclip"> Auto-clipar picos
+                                </label>
+                                <button type="button" id="btn-live-start" class="btn-sec">Iniciar Live</button>
+                                <button type="button" id="btn-live-stop" class="chip" disabled>Parar</button>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s</button>
+                            <button type="button" id="btn-live-mark-post" class="chip" disabled>Marcar Agora (+15s)</button>
+                            <span id="live-status-text" style="font-size:12px; color:var(--text-muted);">Nenhuma live ativa.</span>
+                        </div>
+                    </div>
+                </details>
+
                 <details class="details-box">
                     <summary>Baixar vídeo autorizado de um link</summary>
                     <div class="row-dl" style="margin-top:10px;">
@@ -929,6 +953,118 @@ http://127.0.0.1:8000/docs</div>
                 }
             } catch (err) {
                 setStatus(`Erro ao carregar fontes: ${err.message}`, 'err');
+            }
+        }
+
+        let livePollTimer = null;
+        let lastLiveClipsCount = 0;
+
+        function currentLiveRenderOpts() {
+            const stackedH = document.getElementById('stacked_facecam_height');
+            return {
+                layout: currentLayout,
+                facecam_rect: currentLayout === 'stacked' ? getRectFromInputs('fc') : null,
+                gameplay_rect: currentLayout === 'stacked' ? getRectFromInputs('gp') : null,
+                stacked_facecam_height: stackedH ? parseInt(stackedH.value, 10) || 720 : 720,
+                burn_subtitles: document.getElementById('burn_subtitles').checked,
+                subtitle_preset: currentSubPreset,
+            };
+        }
+
+        function updateLiveUI(st) {
+            const running = Boolean(st && st.running);
+            document.getElementById('btn-live-start').disabled = running;
+            document.getElementById('btn-live-stop').disabled = !running;
+            document.getElementById('btn-live-clip-now').disabled = !running || (st.segments_count || 0) === 0;
+            document.getElementById('btn-live-mark-post').disabled = !running || (st.segments_count || 0) === 0;
+
+            const statusEl = document.getElementById('live-status-text');
+            if (running) {
+                const plat = st.platform === 'x' ? 'X' : 'YouTube';
+                statusEl.textContent = `Ao vivo (${plat}) · ${fmtNum(st.buffer_duration_s || 0, 0)}s em buffer · ${st.clips_generated || 0} clipe(s)`;
+            } else if (st && st.last_error) {
+                statusEl.textContent = `Erro na live: ${st.last_error}`;
+            } else if (st && st.segments_count > 0) {
+                statusEl.textContent = `Live encerrada · ${st.clips_generated || 0} clipe(s) gerados.`;
+            } else {
+                statusEl.textContent = 'Nenhuma live ativa.';
+            }
+
+            if (st && (st.clips_generated || 0) > lastLiveClipsCount) {
+                lastLiveClipsCount = st.clips_generated;
+                loadClips();
+            }
+        }
+
+        async function pollLiveStatus() {
+            try {
+                const st = await api('/api/v1/studio/live/status');
+                updateLiveUI(st);
+                if (!st.running && livePollTimer) {
+                    clearInterval(livePollTimer);
+                    livePollTimer = null;
+                }
+            } catch (_) {}
+        }
+
+        async function startLiveCapture() {
+            const url = document.getElementById('live_url').value.trim();
+            if (!url) {
+                setStatus('Informe a URL da live no YouTube ou X.', 'err');
+                return;
+            }
+            setStatus('Conectando à transmissão ao vivo...', 'busy');
+            try {
+                const opts = currentLiveRenderOpts();
+                const st = await api('/api/v1/studio/live/start', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        url,
+                        auto_clip: document.getElementById('live_autoclip').checked,
+                        ...opts,
+                    }),
+                });
+                lastLiveClipsCount = st.clips_generated || 0;
+                updateLiveUI(st);
+                if (livePollTimer) clearInterval(livePollTimer);
+                livePollTimer = setInterval(pollLiveStatus, 2500);
+                setStatus('Captura ao vivo iniciada. Aguarde o primeiro segmento (10s) para clipar.', 'idle');
+            } catch (err) {
+                setStatus(`Falha ao iniciar live: ${err.message}`, 'err');
+            }
+        }
+
+        async function stopLiveCapture() {
+            try {
+                const st = await api('/api/v1/studio/live/stop', { method: 'POST' });
+                updateLiveUI(st);
+                if (livePollTimer) {
+                    clearInterval(livePollTimer);
+                    livePollTimer = null;
+                }
+                setStatus('Transmissão ao vivo encerrada.', 'idle');
+            } catch (err) {
+                setStatus(`Erro ao parar live: ${err.message}`, 'err');
+            }
+        }
+
+        async function markLiveClip(preS, postS) {
+            setStatus(postS > 0 ? 'Momento marcado! Aguardando janela posterior...' : 'Gerando clipe 9:16 do buffer ao vivo...', 'busy');
+            try {
+                const opts = currentLiveRenderOpts();
+                await api('/api/v1/studio/live/mark', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        pre_s: preS,
+                        post_s: postS,
+                        titulo: postS > 0 ? 'Marcação ao Vivo' : 'Corte Instantâneo ao Vivo',
+                        ...opts,
+                    }),
+                });
+                setTimeout(pollLiveStatus, 1500);
+                setStatus(postS > 0 ? 'Marcação registrada; o clipe aparecerá na lista em instantes.' : 'Clipe ao vivo enfileirado para renderização 9:16.', 'idle');
+            } catch (err) {
+                setStatus(`Erro ao clipar ao vivo: ${err.message}`, 'err');
             }
         }
 
@@ -1456,6 +1592,10 @@ http://127.0.0.1:8000/docs</div>
                 btn.addEventListener('click', () => setClipDuration(parseFloat(btn.dataset.dur)));
             });
 
+            document.getElementById('btn-live-start').addEventListener('click', startLiveCapture);
+            document.getElementById('btn-live-stop').addEventListener('click', stopLiveCapture);
+            document.getElementById('btn-live-clip-now').addEventListener('click', () => markLiveClip(30, 0));
+            document.getElementById('btn-live-mark-post').addEventListener('click', () => markLiveClip(15, 15));
             document.getElementById('btn-download-vod').addEventListener('click', downloadSourceUrl);
             document.getElementById('btn-suggest').addEventListener('click', suggestMoments);
             document.getElementById('btn-batch-render').addEventListener('click', renderBatchSelected);
