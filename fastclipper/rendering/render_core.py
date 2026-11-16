@@ -31,6 +31,7 @@ def render_vertical_ffmpeg(
     concat_file: Optional[Path] = None,
     layout_config: Optional[ChannelLayoutConfig] = None,
     ass_path: Optional[Path] = None,
+    timeout_s: float = 600.0,
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -84,14 +85,22 @@ def render_vertical_ffmpeg(
     enc = encoder_manager.get_encoder()
     enc_args = encoder_manager.get_encoder_args(enc, width=1080, height=1920)
     full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path.resolve())]
-    res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True)
+    try:
+        res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        logger.error("FFmpeg excedeu o tempo limite de %.0fs.", timeout_s)
+        return False
 
     if res.returncode != 0 and enc != SOFTWARE_ENCODER:
         logger.warning("Hardware encoder '%s' falhou. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
         encoder_manager.mark_broken(enc)
         sw_args = encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
         full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path.resolve())]
-        res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True)
+        try:
+            res = subprocess.run(full_cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            logger.error("FFmpeg (fallback x264) excedeu o tempo limite de %.0fs.", timeout_s)
+            return False
 
     if res.returncode != 0:
         logger.error("Erro no FFmpeg: %s", res.stderr)

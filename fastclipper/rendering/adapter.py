@@ -296,7 +296,7 @@ class IsolatedRenderAdapter:
             "-of", "json",
             str(arquivo),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if res.returncode != 0:
             return {"valid": False, "errors": [f"FFprobe falhou ao inspecionar o arquivo: {res.stderr}"]}
 
@@ -338,7 +338,7 @@ class IsolatedRenderAdapter:
             "-f", "null",
             "-",
         ]
-        decode_res = subprocess.run(decode_cmd, capture_output=True, text=True)
+        decode_res = subprocess.run(decode_cmd, capture_output=True, text=True, timeout=180)
         if decode_res.returncode != 0:
             erros.append(f"Decodificação completa falhou com erros de stream: {decode_res.stderr.strip()}")
 

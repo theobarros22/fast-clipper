@@ -33,7 +33,7 @@ class LayoutEngine:
             "-of", "json",
             str(video_path),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
         dados = json.loads(res.stdout)
         stream = dados["streams"][0]
         return int(stream["width"]), int(stream["height"])
@@ -186,7 +186,7 @@ class LayoutEngine:
             str(out_p),
         ])
 
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if res.returncode != 0:
             raise RuntimeError(f"FFmpeg falhou ao gerar preview do layout: {res.stderr}")
 
@@ -213,7 +213,7 @@ class LayoutEngine:
             "-q:v", "2",
             str(out_p),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if res.returncode != 0 or not out_p.is_file():
             raise RuntimeError(f"FFmpeg falhou ao extrair frame de origem: {res.stderr}")
 
