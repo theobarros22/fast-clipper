@@ -34,6 +34,7 @@ from fastclipper.layouts.facecam_detector import FacecamDetector
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.encoder import HardwareEncoderManager
 from fastclipper.rendering.pipeline_runner import PipelineRunner
+from fastclipper.signals.moment_suggester import MomentSuggester
 from fastclipper.social.oauth_vault import OAuthTokenVault, SocialPlatform
 from fastclipper.storage.sqlite_store import SQLiteStore, SQLiteTaskQueue
 from fastclipper.transcribe.whisper_service import WhisperTranscriptionService
@@ -254,6 +255,30 @@ class ChannelPresetRequest(BaseModel):
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
     stacked_facecam_height: int = 720
+
+
+class SuggestMomentsRequest(BaseModel):
+    video_path: str
+    words: Optional[List[Dict[str, Any]]] = None
+    target_duration_s: float = 25.0
+    top_k: int = 5
+
+
+class BatchRenderItem(BaseModel):
+    inicio_s: float
+    fim_s: float
+
+
+class BatchRenderRequest(BaseModel):
+    video_path: str
+    items: List[BatchRenderItem]
+    layout: str = "solo"
+    facecam_rect: Optional[Dict[str, int]] = None
+    gameplay_rect: Optional[Dict[str, int]] = None
+    words: Optional[List[Dict[str, Any]]] = None
+    subtitles_are_absolute: bool = False
+    subtitle_preset: str = "viral_bounce"
+    burn_subtitles: bool = True
 
 
 # Helper para extrair contexto de autenticação de headers
@@ -654,6 +679,62 @@ def studio_get_preset(channel_id: str):
     return preset
 
 
+@app.post("/api/v1/studio/suggest-moments", tags=["Studio"])
+def studio_suggest_moments(req: SuggestMomentsRequest):
+    """Sugere e ranqueia momentos com base em áudio, palavras-chave e fronteiras de frase."""
+    safe_path = validate_input_path(req.video_path)
+    probe = MediaPrechecker(min_duration_s=1.0).probe(safe_path, require_audio=False)
+    if not probe.is_valid:
+        raise HTTPException(status_code=400, detail=probe.message)
+
+    suggester = MomentSuggester()
+    suggestions = suggester.suggest(
+        video_path=safe_path,
+        duration_s=probe.duration_s or 10.0,
+        words=req.words,
+        target_duration_s=req.target_duration_s,
+        top_k=req.top_k,
+    )
+    return {"suggestions": suggestions, "duration_s": probe.duration_s}
+
+
+@app.post("/api/v1/studio/render-batch", tags=["Studio"])
+def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTasks):
+    """Enfileira vários cortes na fila SQLite e dispara o worker em background."""
+    safe_path = validate_input_path(req.video_path)
+    if not req.items:
+        raise HTTPException(status_code=400, detail="Nenhum corte informado para o lote.")
+
+    job_ids: List[str] = []
+    for idx, item in enumerate(req.items):
+        params = {
+            "video_path": str(safe_path),
+            "inicio_s": item.inicio_s,
+            "fim_s": item.fim_s,
+            "layout": req.layout,
+            "facecam_rect": req.facecam_rect,
+            "gameplay_rect": req.gameplay_rect,
+            "subtitles": req.words,
+            "subtitles_are_absolute": req.subtitles_are_absolute,
+            "subtitle_preset": req.subtitle_preset,
+            "burn_subtitles": req.burn_subtitles,
+        }
+        job = durable_queue.enqueue(
+            org_id="org_default",
+            job_type="render_clip",
+            params=params,
+            idempotency_key=f"batch_{int(time.time()*1000)}_{idx}_{item.inicio_s}_{item.fim_s}",
+        )
+        job_ids.append(job.job_id)
+
+    def _run_batch(count: int):
+        for _ in range(count):
+            pipeline_runner.run_single_step()
+
+    background_tasks.add_task(_run_batch, len(job_ids))
+    return {"enqueued": len(job_ids), "job_ids": job_ids}
+
+
 @app.post("/api/v1/studio/render-now", tags=["Studio"])
 def render_studio_clip_immediate(req: StudioRenderRequest):
     """Renderiza um clipe 9:16 imediatamente a partir dos parâmetros do Studio."""
@@ -714,904 +795,5 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
 
 @app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 def get_dashboard():
-    html_content = """<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast Clipper — Estúdio Local de Clipping 9:16</title>
-    <style>
-        :root {
-            --bg: #F8F7F5;
-            --card: #FFFFFF;
-            --ink: #191817;
-            --sub: #66635F;
-            --muted: #9E9B95;
-            --line: #E8E6E1;
-            --accent: #2563EB;
-            --accent-hover: #1D4ED8;
-            --accent-soft: #EFF6FF;
-            --cta-bg: #191817;
-            --cta-fg: #FFFFFF;
-            --ok: #16A34A;
-            --ok-soft: #F0FDF4;
-            --warn: #D97706;
-            --error: #DC2626;
-            --radius-sm: 8px;
-            --radius-md: 14px;
-            --radius-lg: 20px;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg);
-            color: var(--ink);
-            line-height: 1.5;
-            padding: 24px 36px;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--line);
-            padding-bottom: 20px;
-            margin-bottom: 24px;
-        }
-        .brand {
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .brand span {
-            color: var(--accent);
-        }
-        .tag-studio {
-            background: var(--ink);
-            color: #FFF;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            padding: 3px 8px;
-            border-radius: 6px;
-            letter-spacing: 0.5px;
-        }
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12.5px;
-            font-family: monospace;
-            background: var(--ok-soft);
-            color: var(--ok);
-            border: 1px solid #BBF7D0;
-            padding: 6px 14px;
-            border-radius: 999px;
-            font-weight: 600;
-        }
-        .badge-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--ok);
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-        }
-        .tab-btn {
-            background: transparent;
-            border: 1px solid var(--line);
-            padding: 9px 18px;
-            border-radius: 999px;
-            font-size: 13.5px;
-            font-weight: 500;
-            color: var(--sub);
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-        .tab-btn.active {
-            background: var(--ink);
-            color: #FFF;
-            border-color: var(--ink);
-        }
-
-        /* Studio Main Layout */
-        .studio-grid {
-            display: grid;
-            grid-template-columns: 1.15fr 0.85fr;
-            gap: 28px;
-            align-items: start;
-        }
-        .panel {
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: var(--radius-lg);
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            margin-bottom: 24px;
-        }
-        .panel-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .field {
-            margin-bottom: 18px;
-        }
-        .label {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--sub);
-            margin-bottom: 6px;
-        }
-        .input-text, .select-box, .textarea {
-            width: 100%;
-            padding: 10px 14px;
-            font-size: 13.5px;
-            border: 1px solid var(--line);
-            border-radius: var(--radius-sm);
-            background: #FAFAFA;
-            color: var(--ink);
-            outline: none;
-            transition: border-color 0.15s;
-        }
-        .input-text:focus, .select-box:focus, .textarea:focus {
-            border-color: var(--accent);
-            background: #FFF;
-        }
-        .row-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-        .chips {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .chip {
-            background: #F0EEEA;
-            border: none;
-            font-size: 12px;
-            padding: 5px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            color: var(--sub);
-            font-weight: 500;
-        }
-        .chip:hover {
-            background: #E5E3DD;
-        }
-        .duration-pill {
-            font-size: 12px;
-            font-family: monospace;
-            background: var(--accent-soft);
-            color: var(--accent);
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-weight: 600;
-        }
-
-        /* Layout Cards */
-        .layout-options {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-        .layout-card {
-            border: 2px solid var(--line);
-            border-radius: var(--radius-md);
-            padding: 14px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.15s;
-        }
-        .layout-card.selected {
-            border-color: var(--accent);
-            background: var(--accent-soft);
-        }
-        .layout-card h4 {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-        .layout-card p {
-            font-size: 12px;
-            color: var(--sub);
-        }
-
-        /* Primary Action Button */
-        .btn-render {
-            width: 100%;
-            background: var(--accent);
-            color: #FFFFFF;
-            border: none;
-            padding: 14px;
-            border-radius: var(--radius-md);
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            transition: background 0.15s ease;
-        }
-        .btn-render:hover {
-            background: var(--accent-hover);
-        }
-        .btn-render:disabled {
-            background: var(--muted);
-            cursor: not-allowed;
-        }
-
-        /* Right Panel: Phone Mockup / Video Player */
-        .phone-mockup {
-            width: 270px;
-            height: 480px;
-            background: #000;
-            border-radius: 28px;
-            border: 8px solid #282828;
-            margin: 0 auto 20px auto;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            position: relative;
-        }
-        .phone-mockup video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .no-video-placeholder {
-            color: #888;
-            font-size: 13px;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .clip-list {
-            max-height: 260px;
-            overflow-y: auto;
-        }
-        .clip-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--line);
-            font-size: 13px;
-        }
-        .clip-item:hover {
-            background: #F9F9F8;
-        }
-        .clip-btn-play {
-            background: var(--cta-bg);
-            color: #FFF;
-            border: none;
-            padding: 5px 12px;
-            border-radius: 999px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        /* Control Plane Grid */
-        .grid-3 {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 24px;
-        }
-        .metric-card {
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-            padding: 20px;
-        }
-        .metric-card h3 {
-            font-size: 13px;
-            color: var(--sub);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-        .metric-card .val {
-            font-size: 26px;
-            font-weight: 700;
-            font-family: monospace;
-        }
-        .metric-card .subtext {
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-        .terminal-box {
-            background: #191817;
-            color: #F6F5F3;
-            font-family: monospace;
-            font-size: 12.5px;
-            padding: 16px;
-            border-radius: 10px;
-            white-space: pre-wrap;
-            line-height: 1.6;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="brand">
-            Fast<span>Clipper</span>
-            <span class="tag-studio">Studio Local</span>
-        </div>
-        <div class="status-badge">
-            <div class="badge-dot"></div>
-            SISTEMA OPERACIONAL (88 TESTES VALIDADOS)
-        </div>
-    </div>
-
-    <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('studio')">Estúdio de Clipping 9:16</button>
-        <button class="tab-btn" onclick="switchTab('control')">Plano de Controle & Métricas</button>
-    </div>
-
-    <!-- TAB 1: ESTUDIO DE CLIPPING -->
-    <div id="tab-studio" class="studio-grid">
-        <!-- Coluna Esquerda: Configuração e Parâmetros -->
-        <div>
-            <div class="panel">
-                <div class="panel-title">
-                    <span>1. Vídeo de Origem & Marcação de Corte</span>
-                    <span id="duration-badge" class="duration-pill">Duração: 15.0s</span>
-                </div>
-
-                <div class="field">
-                    <label class="label">Caminho do Vídeo no Computador</label>
-                    <input type="text" id="video_path" class="input-text"
-                           value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
-                           placeholder="Ex: C:\\Users\\...\\gravacao_live.mp4">
-                </div>
-
-                <div class="row-2">
-                    <div class="field">
-                        <label class="label">Início do Corte (segundos)</label>
-                        <input type="number" step="0.1" id="inicio_s" class="input-text" value="0.0" oninput="updateDuration()">
-                    </div>
-                    <div class="field">
-                        <label class="label">Fim do Corte (segundos)</label>
-                        <input type="number" step="0.1" id="fim_s" class="input-text" value="15.0" oninput="updateDuration()">
-                    </div>
-                </div>
-
-                <div class="chips">
-                    <button class="chip" onclick="setClipDuration(15)">+15s</button>
-                    <button class="chip" onclick="setClipDuration(30)">+30s</button>
-                    <button class="chip" onclick="setClipDuration(45)">+45s</button>
-                    <button class="chip" onclick="setClipDuration(60)">+60s</button>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-title">
-                    <span>2. Enquadramento Vertical (9:16)</span>
-                </div>
-                <div class="layout-options">
-                    <div id="card-solo" class="layout-card selected" onclick="selectLayout('solo')">
-                        <h4>Solo 9:16</h4>
-                        <p>Crop vertical centralizado inteligente</p>
-                    </div>
-                    <div id="card-stacked" class="layout-card" onclick="selectLayout('stacked')">
-                        <h4>Empilhado (Stacked)</h4>
-                        <p>Facecam no topo + Gameplay na base</p>
-                    </div>
-                </div>
-
-                <div id="stacked-config" style="display: none; margin-top: 16px; padding: 14px; background: #FAF9F8; border-radius: 10px; border: 1px solid var(--line);">
-                    <div class="row-2">
-                        <div class="field">
-                            <label class="label">Preset de Canal Salvo</label>
-                            <select id="channel-preset-select" class="select-box" onchange="applySelectedPreset()">
-                                <option value="">-- Selecionar preset salvo --</option>
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label class="label">Salvar Preset do Canal</label>
-                            <div style="display:flex; gap:6px;">
-                                <input type="text" id="preset-channel-name" class="input-text" placeholder="Ex: Canal Principal">
-                                <button type="button" class="chip" onclick="saveCurrentPreset()" style="white-space:nowrap;">💾 Salvar</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-                        <button type="button" class="chip" onclick="loadSourcePreview()">🖼️ Extrair Frame & Detectar Facecam</button>
-                        <button type="button" class="chip" onclick="previewLayout916()">📱 Pré-visualizar 9:16</button>
-                    </div>
-
-                    <div id="facecam-canvas-wrap" style="display:none; margin-bottom:10px; position:relative;">
-                        <p style="font-size:11.5px; color:var(--sub); margin-bottom:6px;">Arraste o mouse sobre a imagem para marcar a caixa da Facecam:</p>
-                        <canvas id="facecam-canvas" style="width:100%; border-radius:8px; border:1px solid var(--line); cursor:crosshair;"></canvas>
-                    </div>
-
-                    <div class="row-2">
-                        <div class="field" style="margin-bottom:6px;">
-                            <label class="label">Facecam (x, y, w, h)</label>
-                            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">
-                                <input type="number" id="fc_x" class="input-text" value="50" title="X">
-                                <input type="number" id="fc_y" class="input-text" value="50" title="Y">
-                                <input type="number" id="fc_w" class="input-text" value="400" title="Largura">
-                                <input type="number" id="fc_h" class="input-text" value="300" title="Altura">
-                            </div>
-                        </div>
-                        <div class="field" style="margin-bottom:6px;">
-                            <label class="label">Altura Facecam Topo (px)</label>
-                            <input type="number" id="h-facecam" class="input-text" value="720">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-title">
-                    <span>3. Transcrição Real & Legendas Animadas</span>
-                    <button type="button" class="chip" onclick="transcribeVideo()">🎙️ Transcrever Áudio (Whisper GPU)</button>
-                </div>
-                <div id="transcribe-status" style="display:none; font-size:12px; margin-bottom:10px; color:var(--accent);"></div>
-                <div class="row-2">
-                    <div class="field">
-                        <label class="label">Estilo da Legenda</label>
-                        <select id="subtitle_preset" class="select-box">
-                            <option value="viral_bounce">Viral Bounce (Amarelo & Preto)</option>
-                            <option value="minimal_clean">Minimal Clean (Calm White)</option>
-                            <option value="cinema_editorial">Cinema Editorial (Alto Contraste)</option>
-                        </select>
-                    </div>
-                    <div class="field" style="display:flex; align-items:center; margin-top: 24px;">
-                        <label style="font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="burn_subtitles" checked style="width: 18px; height: 18px;">
-                            Queimar legendas animadas no vídeo
-                        </label>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <label class="label">Texto da Legenda / Gancho do Clipe</label>
-                    <textarea id="subtitle_text" class="textarea" rows="2"
-                              placeholder="Digite ou cole a frase de impacto que aparecerá na legenda...">ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL</textarea>
-                </div>
-
-                <button id="btn-render-action" class="btn-render" onclick="renderClipNow()">
-                    <span>🚀 RENDERIZAR CLIPE 9:16 AGORA</span>
-                </button>
-                <div id="render-status" style="margin-top: 12px; font-size: 13px; font-weight: 500; text-align: center; display: none;"></div>
-            </div>
-        </div>
-
-        <!-- Coluna Direita: Player e Biblioteca -->
-        <div>
-            <div class="panel" style="text-align: center;">
-                <div class="panel-title">
-                    <span>Pré-Visualização 9:16</span>
-                    <a id="btn-download-clip" href="#" download style="display: none; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none;">⬇️ Baixar Clipe</a>
-                </div>
-
-                <div class="phone-mockup">
-                    <video id="player-preview" controls playsinline>
-                        <source id="video-source" src="" type="video/mp4">
-                        Seu navegador não suporta reprodução de vídeo.
-                    </video>
-                    <div id="video-placeholder" class="no-video-placeholder">
-                        <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
-                        O clipe renderizado aparecerá aqui pronto para assistir e baixar.
-                    </div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-title">
-                    <span>Clipes Renderizados Recentemente</span>
-                    <button onclick="loadClipsList()" style="background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; font-weight:600;">↻ Atualizar</button>
-                </div>
-                <div id="clips-container" class="clip-list">
-                    <div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Carregando clipes...</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- TAB 2: PLANO DE CONTROLE & METRICAS -->
-    <div id="tab-control" style="display: none;">
-        <div class="grid-3">
-            <div class="metric-card">
-                <h3>Hardware Encoder</h3>
-                <div class="val">NVENC / QSV</div>
-                <div class="subtext">Aceleração por hardware com fallback x264</div>
-            </div>
-            <div class="metric-card">
-                <h3>Media Pre-Check</h3>
-                <div class="val">ATIVO</div>
-                <div class="subtext">Sonda estrita anti-desperdício de GPU</div>
-            </div>
-            <div class="metric-card">
-                <h3>Pipeline Runner</h3>
-                <div class="val">ONLINE</div>
-                <div class="subtext">Processamento de fila durável ponta a ponta</div>
-            </div>
-        </div>
-
-        <div class="panel">
-            <div class="panel-title">Guia Operacional no Terminal</div>
-            <div class="terminal-box">
-# Iniciar o Estúdio Fast Clipper e abrir no navegador:
-python -m fastclipper studio
-
-# Executar worker contínuo de renderização:
-python -m fastclipper queue worker --run-pipeline
-
-# Diagnóstico preliminar de vídeo fonte:
-python -m fastclipper precheck --video tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4
-
-# Documentação OpenAPI interativa (Swagger):
-Acesse: http://127.0.0.1:8000/docs
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let currentLayout = 'solo';
-        let transcribedWords = null;
-        let previewImgObj = null;
-        let srcWidth = 1920;
-        let srcHeight = 1080;
-        let dragStart = null;
-        let savedPresetsMap = {};
-
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            if (tab === 'studio') {
-                document.querySelectorAll('.tab-btn')[0].classList.add('active');
-                document.getElementById('tab-studio').style.display = 'grid';
-                document.getElementById('tab-control').style.display = 'none';
-            } else {
-                document.querySelectorAll('.tab-btn')[1].classList.add('active');
-                document.getElementById('tab-studio').style.display = 'none';
-                document.getElementById('tab-control').style.display = 'block';
-            }
-        }
-
-        function updateDuration() {
-            const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
-            const fim = parseFloat(document.getElementById('fim_s').value) || 0;
-            const dur = Math.max(0, fim - ini).toFixed(1);
-            document.getElementById('duration-badge').innerText = `Duração: ${dur}s`;
-        }
-
-        function setClipDuration(seconds) {
-            const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
-            document.getElementById('fim_s').value = (ini + seconds).toFixed(1);
-            updateDuration();
-        }
-
-        function selectLayout(mode) {
-            currentLayout = mode;
-            document.getElementById('card-solo').classList.toggle('selected', mode === 'solo');
-            document.getElementById('card-stacked').classList.toggle('selected', mode === 'stacked');
-            document.getElementById('stacked-config').style.display = mode === 'stacked' ? 'block' : 'none';
-        }
-
-        function getFacecamRect() {
-            return {
-                x: parseInt(document.getElementById('fc_x').value, 10) || 0,
-                y: parseInt(document.getElementById('fc_y').value, 10) || 0,
-                w: parseInt(document.getElementById('fc_w').value, 10) || 400,
-                h: parseInt(document.getElementById('fc_h').value, 10) || 300,
-            };
-        }
-
-        function drawFacecamCanvas() {
-            const canvas = document.getElementById('facecam-canvas');
-            if (!canvas || !previewImgObj) return;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(previewImgObj, 0, 0, canvas.width, canvas.height);
-            const r = getFacecamRect();
-            const sx = canvas.width / srcWidth;
-            const sy = canvas.height / srcHeight;
-            ctx.strokeStyle = '#2563EB';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
-            ctx.fillStyle = 'rgba(37, 99, 235, 0.18)';
-            ctx.fillRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
-        }
-
-        async function loadSourcePreview() {
-            const videoPath = document.getElementById('video_path').value.trim();
-            const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
-            if (!videoPath) return alert('Informe o caminho do vídeo.');
-
-            const res = await fetch('/api/v1/studio/preview-frame', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ video_path: videoPath, timestamp_s: inicioS, detect_facecam: true })
-            });
-            const data = await res.json();
-            if (!res.ok) return alert(data.detail || 'Falha ao extrair frame.');
-
-            srcWidth = data.source_width;
-            srcHeight = data.source_height;
-            if (data.facecam_suggestion && data.facecam_suggestion.facecam_rect) {
-                const fc = data.facecam_suggestion.facecam_rect;
-                document.getElementById('fc_x').value = fc.x;
-                document.getElementById('fc_y').value = fc.y;
-                document.getElementById('fc_w').value = fc.w;
-                document.getElementById('fc_h').value = fc.h;
-            }
-
-            const wrap = document.getElementById('facecam-canvas-wrap');
-            const canvas = document.getElementById('facecam-canvas');
-            wrap.style.display = 'block';
-            previewImgObj = new Image();
-            previewImgObj.onload = () => {
-                canvas.width = 640;
-                canvas.height = Math.round(640 * (srcHeight / srcWidth));
-                drawFacecamCanvas();
-            };
-            previewImgObj.src = data.image_url;
-        }
-
-        async function previewLayout916() {
-            const videoPath = document.getElementById('video_path').value.trim();
-            const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
-            const res = await fetch('/api/v1/studio/preview-layout', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    video_path: videoPath,
-                    timestamp_s: inicioS,
-                    layout: currentLayout,
-                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.image_url) {
-                window.open(data.image_url, '_blank');
-            } else {
-                alert(data.detail || 'Erro ao gerar prévia 9:16.');
-            }
-        }
-
-        async function loadPresetsList() {
-            try {
-                const res = await fetch('/api/v1/studio/presets');
-                const items = await res.json();
-                const sel = document.getElementById('channel-preset-select');
-                savedPresetsMap = {};
-                sel.innerHTML = '<option value="">-- Selecionar preset salvo --</option>';
-                for (const p of items) {
-                    savedPresetsMap[p.channel_id] = p;
-                    const opt = document.createElement('option');
-                    opt.value = p.channel_id;
-                    opt.textContent = `${p.name} (${p.layout_mode})`;
-                    sel.appendChild(opt);
-                }
-            } catch (e) {}
-        }
-
-        function applySelectedPreset() {
-            const id = document.getElementById('channel-preset-select').value;
-            const p = savedPresetsMap[id];
-            if (!p) return;
-            selectLayout(p.layout_mode === 'stacked' ? 'stacked' : 'solo');
-            if (p.facecam_rect) {
-                document.getElementById('fc_x').value = p.facecam_rect.x;
-                document.getElementById('fc_y').value = p.facecam_rect.y;
-                document.getElementById('fc_w').value = p.facecam_rect.w;
-                document.getElementById('fc_h').value = p.facecam_rect.h;
-                drawFacecamCanvas();
-            }
-            if (p.stacked_facecam_height) {
-                document.getElementById('h-facecam').value = p.stacked_facecam_height;
-            }
-        }
-
-        async function saveCurrentPreset() {
-            const name = document.getElementById('preset-channel-name').value.trim();
-            if (!name) return alert('Informe um nome para o canal/preset.');
-            const channelId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-            const res = await fetch('/api/v1/studio/presets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    channel_id: channelId,
-                    name: name,
-                    layout_mode: currentLayout,
-                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                    stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720
-                })
-            });
-            if (res.ok) {
-                await loadPresetsList();
-                document.getElementById('channel-preset-select').value = channelId;
-            }
-        }
-
-        async function transcribeVideo() {
-            const videoPath = document.getElementById('video_path').value.trim();
-            const st = document.getElementById('transcribe-status');
-            if (!videoPath) return alert('Informe o caminho do vídeo.');
-            st.style.display = 'block';
-            st.style.color = 'var(--accent)';
-            st.innerText = '⏳ Transcrevendo áudio com faster-whisper (RTX 3050 GPU)...';
-            try {
-                const res = await fetch('/api/v1/studio/transcribe', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ video_path: videoPath, language: 'pt' })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    transcribedWords = data.words || [];
-                    if (data.full_text) {
-                        document.getElementById('subtitle_text').value = data.full_text;
-                    }
-                    st.style.color = 'var(--ok)';
-                    st.innerText = `✅ ${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache SQLite' : 'GPU'}).`;
-                } else {
-                    st.style.color = 'var(--error)';
-                    st.innerText = `❌ ${data.detail || 'Falha na transcrição'}`;
-                }
-            } catch (err) {
-                st.style.color = 'var(--error)';
-                st.innerText = `❌ Erro: ${err.message}`;
-            }
-        }
-
-        async function renderClipNow() {
-            const btn = document.getElementById('btn-render-action');
-            const statusDiv = document.getElementById('render-status');
-            const videoPath = document.getElementById('video_path').value.trim();
-            const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
-            const fimS = parseFloat(document.getElementById('fim_s').value) || 10;
-            const subPreset = document.getElementById('subtitle_preset').value;
-            const subText = document.getElementById('subtitle_text').value.trim();
-            const burnSubs = document.getElementById('burn_subtitles').checked;
-
-            if (!videoPath) {
-                alert('Informe o caminho do vídeo de origem.');
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Processando e Renderizando 9:16...</span>';
-            statusDiv.style.display = 'block';
-            statusDiv.style.color = 'var(--accent)';
-            statusDiv.innerText = 'Executando corte, ajuste 9:16 e queima de legendas...';
-
-            const facecamRect = currentLayout === 'stacked' ? getFacecamRect() : null;
-            const useRealWords = Array.isArray(transcribedWords) && transcribedWords.length > 0;
-
-            const payload = {
-                video_path: videoPath,
-                inicio_s: inicioS,
-                fim_s: fimS,
-                layout: currentLayout,
-                facecam_rect: facecamRect,
-                subtitle_text: useRealWords ? null : subText,
-                words: useRealWords ? transcribedWords : null,
-                subtitles_are_absolute: useRealWords,
-                subtitle_preset: subPreset,
-                burn_subtitles: burnSubs
-            };
-
-            try {
-                const res = await fetch('/api/v1/studio/render-now', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-
-                if (res.ok && data.success) {
-                    statusDiv.style.color = 'var(--ok)';
-                    statusDiv.innerText = `✅ Sucesso! Clipe renderizado em ${data.duration.toFixed(1)}s.`;
-                    playClipInMockup(data.download_url, data.filename);
-                    loadClipsList();
-                } else {
-                    statusDiv.style.color = 'var(--error)';
-                    statusDiv.innerText = `❌ Erro: ${data.detail || 'Falha na renderização'}`;
-                }
-            } catch (err) {
-                statusDiv.style.color = 'var(--error)';
-                statusDiv.innerText = `❌ Erro de conexão com o servidor: ${err.message}`;
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<span>🚀 RENDERIZAR CLIPE 9:16 AGORA</span>';
-            }
-        }
-
-        function playClipInMockup(url, filename) {
-            const player = document.getElementById('player-preview');
-            const source = document.getElementById('video-source');
-            const placeholder = document.getElementById('video-placeholder');
-            const dlBtn = document.getElementById('btn-download-clip');
-
-            placeholder.style.display = 'none';
-            player.style.display = 'block';
-            source.src = url;
-            player.load();
-            player.play().catch(() => {});
-
-            dlBtn.href = url;
-            dlBtn.style.display = 'inline';
-            dlBtn.download = filename || 'clipe_9x16.mp4';
-        }
-
-        async function loadClipsList() {
-            const container = document.getElementById('clips-container');
-            try {
-                const res = await fetch('/api/v1/studio/clips');
-                const clips = await res.json();
-                if (!clips || clips.length === 0) {
-                    container.innerHTML = '<div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Nenhum clipe renderizado ainda.</div>';
-                    return;
-                }
-
-                container.innerHTML = clips.map(c => `
-                    <div class="clip-item">
-                        <div>
-                            <strong>${c.filename}</strong><br>
-                            <span style="font-size: 11.5px; color: var(--muted);">${c.size_mb} MB</span>
-                        </div>
-                        <button class="clip-btn-play" onclick="playClipInMockup('${c.download_url}', '${c.filename}')">▶ Assistir</button>
-                    </div>
-                `).join('');
-            } catch (e) {
-                container.innerHTML = '<div style="font-size: 13px; color: var(--error); padding: 12px; text-align: center;">Erro ao carregar lista de clipes.</div>';
-            }
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            loadClipsList();
-            loadPresetsList();
-            const canvas = document.getElementById('facecam-canvas');
-            if (canvas) {
-                canvas.addEventListener('mousedown', (e) => {
-                    const rect = canvas.getBoundingClientRect();
-                    dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-                });
-                canvas.addEventListener('mouseup', (e) => {
-                    if (!dragStart) return;
-                    const rect = canvas.getBoundingClientRect();
-                    const x2 = e.clientX - rect.left;
-                    const y2 = e.clientY - rect.top;
-                    const sx = srcWidth / rect.width;
-                    const sy = srcHeight / rect.height;
-                    const rx = Math.round(Math.min(dragStart.x, x2) * sx);
-                    const ry = Math.round(Math.min(dragStart.y, y2) * sy);
-                    const rw = Math.max(80, Math.round(Math.abs(x2 - dragStart.x) * sx));
-                    const rh = Math.max(80, Math.round(Math.abs(y2 - dragStart.y) * sy));
-                    document.getElementById('fc_x').value = rx;
-                    document.getElementById('fc_y').value = ry;
-                    document.getElementById('fc_w').value = rw;
-                    document.getElementById('fc_h').value = rh;
-                    dragStart = null;
-                    drawFacecamCanvas();
-                });
-            }
-        });
-    </script>
-</body>
-</html>
-"""
-    return HTMLResponse(content=html_content, status_code=200)
-    return HTMLResponse(content=html_content, status_code=200)
+    studio_html = ROOT / "fastclipper" / "web" / "studio.html"
+    return HTMLResponse(content=studio_html.read_text(encoding="utf-8"), status_code=200)
