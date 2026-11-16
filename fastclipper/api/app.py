@@ -28,6 +28,9 @@ from fastclipper.collaboration.service import (
 )
 from fastclipper.ingest.precheck import MediaPrechecker
 from fastclipper.ingest.vod_ingest import VodIngestor
+from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangle
+from fastclipper.layouts.engine import LayoutEngine
+from fastclipper.layouts.facecam_detector import FacecamDetector
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.encoder import HardwareEncoderManager
 from fastclipper.rendering.pipeline_runner import PipelineRunner
@@ -227,6 +230,30 @@ class TranscribeRequest(BaseModel):
     language: Optional[str] = "pt"
     model_name: Optional[str] = None
     force_retranscribe: bool = False
+
+
+class PreviewFrameRequest(BaseModel):
+    video_path: str
+    timestamp_s: float = 0.0
+    detect_facecam: bool = True
+
+
+class PreviewLayoutRequest(BaseModel):
+    video_path: str
+    timestamp_s: float = 0.0
+    layout: str = "solo"
+    facecam_rect: Optional[Dict[str, int]] = None
+    gameplay_rect: Optional[Dict[str, int]] = None
+    stacked_facecam_height: int = 720
+
+
+class ChannelPresetRequest(BaseModel):
+    channel_id: str
+    name: str
+    layout_mode: str = "solo"
+    facecam_rect: Optional[Dict[str, int]] = None
+    gameplay_rect: Optional[Dict[str, int]] = None
+    stacked_facecam_height: int = 720
 
 
 # Helper para extrair contexto de autenticação de headers
@@ -525,6 +552,106 @@ def studio_transcribe_source(req: TranscribeRequest):
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Erro na transcrição: {exc}")
+
+
+@app.post("/api/v1/studio/preview-frame", tags=["Studio"])
+def studio_preview_frame(req: PreviewFrameRequest):
+    """Extrai um frame original da mídia e sugere o retângulo inicial de Facecam."""
+    safe_path = validate_input_path(req.video_path)
+    previews_dir = pipeline_runner.output_dir / "_previews"
+    previews_dir.mkdir(parents=True, exist_ok=True)
+    img_name = f"src_{int(time.time() * 1000)}.jpg"
+    img_path = previews_dir / img_name
+
+    engine = LayoutEngine()
+    try:
+        info = engine.extract_source_frame(safe_path, req.timestamp_s, img_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    suggestion = None
+    if req.detect_facecam:
+        detector = FacecamDetector()
+        suggestion = detector.detect_from_image(img_path, info["source_width"], info["source_height"])
+
+    return {
+        "image_url": f"/api/v1/studio/preview-image/{img_name}",
+        "source_width": info["source_width"],
+        "source_height": info["source_height"],
+        "timestamp_s": info["timestamp_s"],
+        "facecam_suggestion": suggestion,
+    }
+
+
+@app.post("/api/v1/studio/preview-layout", tags=["Studio"])
+def studio_preview_layout(req: PreviewLayoutRequest):
+    """Gera uma prévia 1080x1920 aplicando o layout Solo ou Empilhado com as caixas atuais."""
+    safe_path = validate_input_path(req.video_path)
+    previews_dir = pipeline_runner.output_dir / "_previews"
+    previews_dir.mkdir(parents=True, exist_ok=True)
+    img_name = f"layout_{int(time.time() * 1000)}.jpg"
+    img_path = previews_dir / img_name
+
+    mode = LayoutMode.STACKED if req.layout.lower() == "stacked" else LayoutMode.SOLO
+    fc = Rectangle(**req.facecam_rect) if req.facecam_rect else None
+    gp = Rectangle(**req.gameplay_rect) if req.gameplay_rect else None
+    cfg = ChannelLayoutConfig(
+        channel_id="preview",
+        mode=mode,
+        facecam_rect=fc,
+        gameplay_rect=gp,
+        stacked_facecam_height=req.stacked_facecam_height,
+    )
+
+    engine = LayoutEngine()
+    try:
+        engine.generate_preview(safe_path, req.timestamp_s, cfg, img_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"image_url": f"/api/v1/studio/preview-image/{img_name}"}
+
+
+@app.get("/api/v1/studio/preview-image/{filename}", tags=["Studio"])
+def studio_get_preview_image(filename: str):
+    """Serve uma imagem de prévia gerada pelo Studio."""
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=403, detail="Nome de arquivo inválido.")
+    previews_dir = (pipeline_runner.output_dir / "_previews").resolve()
+    caminho = (previews_dir / filename).resolve()
+    if caminho.parent != previews_dir:
+        raise HTTPException(status_code=403, detail="Acesso negado fora da pasta de prévias.")
+    if not caminho.is_file():
+        raise HTTPException(status_code=404, detail="Imagem de prévia não encontrada.")
+    return FileResponse(str(caminho), media_type="image/jpeg", filename=filename)
+
+
+@app.get("/api/v1/studio/presets", tags=["Studio"])
+def studio_list_presets():
+    """Lista presets de layout salvos por canal no SQLite."""
+    return sqlite_store.list_channel_presets()
+
+
+@app.post("/api/v1/studio/presets", tags=["Studio"])
+def studio_save_preset(req: ChannelPresetRequest):
+    """Salva ou atualiza o preset de enquadramento (Facecam/Gameplay) de um canal."""
+    return sqlite_store.save_channel_preset(
+        channel_id=req.channel_id,
+        name=req.name,
+        layout_mode=req.layout_mode,
+        facecam_rect=req.facecam_rect,
+        gameplay_rect=req.gameplay_rect,
+        stacked_facecam_height=req.stacked_facecam_height,
+    )
+
+
+@app.get("/api/v1/studio/presets/{channel_id}", tags=["Studio"])
+def studio_get_preset(channel_id: str):
+    """Recupera o preset de layout de um canal específico."""
+    preset = sqlite_store.get_channel_preset(channel_id)
+    if not preset:
+        raise HTTPException(status_code=404, detail="Preset de canal não encontrado.")
+    return preset
 
 
 @app.post("/api/v1/studio/render-now", tags=["Studio"])
@@ -990,18 +1117,45 @@ def get_dashboard():
                     </div>
                 </div>
 
-                <div id="stacked-config" style="display: none; margin-top: 16px; padding: 12px; background: #FAF9F8; border-radius: 8px;">
+                <div id="stacked-config" style="display: none; margin-top: 16px; padding: 14px; background: #FAF9F8; border-radius: 10px; border: 1px solid var(--line);">
                     <div class="row-2">
                         <div class="field">
-                            <label class="label">Preset Facecam</label>
-                            <select id="facecam-preset" class="select-box" onchange="applyFacecamPreset()">
-                                <option value="top-left">Canto Superior Esquerdo</option>
-                                <option value="top-right">Canto Superior Direito</option>
-                                <option value="bottom-left">Canto Inferior Esquerdo</option>
+                            <label class="label">Preset de Canal Salvo</label>
+                            <select id="channel-preset-select" class="select-box" onchange="applySelectedPreset()">
+                                <option value="">-- Selecionar preset salvo --</option>
                             </select>
                         </div>
                         <div class="field">
-                            <label class="label">Altura Facecam Topo</label>
+                            <label class="label">Salvar Preset do Canal</label>
+                            <div style="display:flex; gap:6px;">
+                                <input type="text" id="preset-channel-name" class="input-text" placeholder="Ex: Canal Principal">
+                                <button type="button" class="chip" onclick="saveCurrentPreset()" style="white-space:nowrap;">💾 Salvar</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+                        <button type="button" class="chip" onclick="loadSourcePreview()">🖼️ Extrair Frame & Detectar Facecam</button>
+                        <button type="button" class="chip" onclick="previewLayout916()">📱 Pré-visualizar 9:16</button>
+                    </div>
+
+                    <div id="facecam-canvas-wrap" style="display:none; margin-bottom:10px; position:relative;">
+                        <p style="font-size:11.5px; color:var(--sub); margin-bottom:6px;">Arraste o mouse sobre a imagem para marcar a caixa da Facecam:</p>
+                        <canvas id="facecam-canvas" style="width:100%; border-radius:8px; border:1px solid var(--line); cursor:crosshair;"></canvas>
+                    </div>
+
+                    <div class="row-2">
+                        <div class="field" style="margin-bottom:6px;">
+                            <label class="label">Facecam (x, y, w, h)</label>
+                            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">
+                                <input type="number" id="fc_x" class="input-text" value="50" title="X">
+                                <input type="number" id="fc_y" class="input-text" value="50" title="Y">
+                                <input type="number" id="fc_w" class="input-text" value="400" title="Largura">
+                                <input type="number" id="fc_h" class="input-text" value="300" title="Altura">
+                            </div>
+                        </div>
+                        <div class="field" style="margin-bottom:6px;">
+                            <label class="label">Altura Facecam Topo (px)</label>
                             <input type="number" id="h-facecam" class="input-text" value="720">
                         </div>
                     </div>
@@ -1010,8 +1164,10 @@ def get_dashboard():
 
             <div class="panel">
                 <div class="panel-title">
-                    <span>3. Legendas Animadas & Gancho Viral</span>
+                    <span>3. Transcrição Real & Legendas Animadas</span>
+                    <button type="button" class="chip" onclick="transcribeVideo()">🎙️ Transcrever Áudio (Whisper GPU)</button>
                 </div>
+                <div id="transcribe-status" style="display:none; font-size:12px; margin-bottom:10px; color:var(--accent);"></div>
                 <div class="row-2">
                     <div class="field">
                         <label class="label">Estilo da Legenda</label>
@@ -1114,6 +1270,12 @@ Acesse: http://127.0.0.1:8000/docs
 
     <script>
         let currentLayout = 'solo';
+        let transcribedWords = null;
+        let previewImgObj = null;
+        let srcWidth = 1920;
+        let srcHeight = 1080;
+        let dragStart = null;
+        let savedPresetsMap = {};
 
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1148,6 +1310,172 @@ Acesse: http://127.0.0.1:8000/docs
             document.getElementById('stacked-config').style.display = mode === 'stacked' ? 'block' : 'none';
         }
 
+        function getFacecamRect() {
+            return {
+                x: parseInt(document.getElementById('fc_x').value, 10) || 0,
+                y: parseInt(document.getElementById('fc_y').value, 10) || 0,
+                w: parseInt(document.getElementById('fc_w').value, 10) || 400,
+                h: parseInt(document.getElementById('fc_h').value, 10) || 300,
+            };
+        }
+
+        function drawFacecamCanvas() {
+            const canvas = document.getElementById('facecam-canvas');
+            if (!canvas || !previewImgObj) return;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(previewImgObj, 0, 0, canvas.width, canvas.height);
+            const r = getFacecamRect();
+            const sx = canvas.width / srcWidth;
+            const sy = canvas.height / srcHeight;
+            ctx.strokeStyle = '#2563EB';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
+            ctx.fillStyle = 'rgba(37, 99, 235, 0.18)';
+            ctx.fillRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
+        }
+
+        async function loadSourcePreview() {
+            const videoPath = document.getElementById('video_path').value.trim();
+            const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
+            if (!videoPath) return alert('Informe o caminho do vídeo.');
+
+            const res = await fetch('/api/v1/studio/preview-frame', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video_path: videoPath, timestamp_s: inicioS, detect_facecam: true })
+            });
+            const data = await res.json();
+            if (!res.ok) return alert(data.detail || 'Falha ao extrair frame.');
+
+            srcWidth = data.source_width;
+            srcHeight = data.source_height;
+            if (data.facecam_suggestion && data.facecam_suggestion.facecam_rect) {
+                const fc = data.facecam_suggestion.facecam_rect;
+                document.getElementById('fc_x').value = fc.x;
+                document.getElementById('fc_y').value = fc.y;
+                document.getElementById('fc_w').value = fc.w;
+                document.getElementById('fc_h').value = fc.h;
+            }
+
+            const wrap = document.getElementById('facecam-canvas-wrap');
+            const canvas = document.getElementById('facecam-canvas');
+            wrap.style.display = 'block';
+            previewImgObj = new Image();
+            previewImgObj.onload = () => {
+                canvas.width = 640;
+                canvas.height = Math.round(640 * (srcHeight / srcWidth));
+                drawFacecamCanvas();
+            };
+            previewImgObj.src = data.image_url;
+        }
+
+        async function previewLayout916() {
+            const videoPath = document.getElementById('video_path').value.trim();
+            const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
+            const res = await fetch('/api/v1/studio/preview-layout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    video_path: videoPath,
+                    timestamp_s: inicioS,
+                    layout: currentLayout,
+                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.image_url) {
+                window.open(data.image_url, '_blank');
+            } else {
+                alert(data.detail || 'Erro ao gerar prévia 9:16.');
+            }
+        }
+
+        async function loadPresetsList() {
+            try {
+                const res = await fetch('/api/v1/studio/presets');
+                const items = await res.json();
+                const sel = document.getElementById('channel-preset-select');
+                savedPresetsMap = {};
+                sel.innerHTML = '<option value="">-- Selecionar preset salvo --</option>';
+                for (const p of items) {
+                    savedPresetsMap[p.channel_id] = p;
+                    const opt = document.createElement('option');
+                    opt.value = p.channel_id;
+                    opt.textContent = `${p.name} (${p.layout_mode})`;
+                    sel.appendChild(opt);
+                }
+            } catch (e) {}
+        }
+
+        function applySelectedPreset() {
+            const id = document.getElementById('channel-preset-select').value;
+            const p = savedPresetsMap[id];
+            if (!p) return;
+            selectLayout(p.layout_mode === 'stacked' ? 'stacked' : 'solo');
+            if (p.facecam_rect) {
+                document.getElementById('fc_x').value = p.facecam_rect.x;
+                document.getElementById('fc_y').value = p.facecam_rect.y;
+                document.getElementById('fc_w').value = p.facecam_rect.w;
+                document.getElementById('fc_h').value = p.facecam_rect.h;
+                drawFacecamCanvas();
+            }
+            if (p.stacked_facecam_height) {
+                document.getElementById('h-facecam').value = p.stacked_facecam_height;
+            }
+        }
+
+        async function saveCurrentPreset() {
+            const name = document.getElementById('preset-channel-name').value.trim();
+            if (!name) return alert('Informe um nome para o canal/preset.');
+            const channelId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            const res = await fetch('/api/v1/studio/presets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    channel_id: channelId,
+                    name: name,
+                    layout_mode: currentLayout,
+                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
+                    stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720
+                })
+            });
+            if (res.ok) {
+                await loadPresetsList();
+                document.getElementById('channel-preset-select').value = channelId;
+            }
+        }
+
+        async function transcribeVideo() {
+            const videoPath = document.getElementById('video_path').value.trim();
+            const st = document.getElementById('transcribe-status');
+            if (!videoPath) return alert('Informe o caminho do vídeo.');
+            st.style.display = 'block';
+            st.style.color = 'var(--accent)';
+            st.innerText = '⏳ Transcrevendo áudio com faster-whisper (RTX 3050 GPU)...';
+            try {
+                const res = await fetch('/api/v1/studio/transcribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_path: videoPath, language: 'pt' })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    transcribedWords = data.words || [];
+                    if (data.full_text) {
+                        document.getElementById('subtitle_text').value = data.full_text;
+                    }
+                    st.style.color = 'var(--ok)';
+                    st.innerText = `✅ ${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache SQLite' : 'GPU'}).`;
+                } else {
+                    st.style.color = 'var(--error)';
+                    st.innerText = `❌ ${data.detail || 'Falha na transcrição'}`;
+                }
+            } catch (err) {
+                st.style.color = 'var(--error)';
+                st.innerText = `❌ Erro: ${err.message}`;
+            }
+        }
+
         async function renderClipNow() {
             const btn = document.getElementById('btn-render-action');
             const statusDiv = document.getElementById('render-status');
@@ -1169,10 +1497,8 @@ Acesse: http://127.0.0.1:8000/docs
             statusDiv.style.color = 'var(--accent)';
             statusDiv.innerText = 'Executando corte, ajuste 9:16 e queima de legendas...';
 
-            let facecamRect = null;
-            if (currentLayout === 'stacked') {
-                facecamRect = { x: 50, y: 50, w: 400, h: 300 };
-            }
+            const facecamRect = currentLayout === 'stacked' ? getFacecamRect() : null;
+            const useRealWords = Array.isArray(transcribedWords) && transcribedWords.length > 0;
 
             const payload = {
                 video_path: videoPath,
@@ -1180,7 +1506,9 @@ Acesse: http://127.0.0.1:8000/docs
                 fim_s: fimS,
                 layout: currentLayout,
                 facecam_rect: facecamRect,
-                subtitle_text: subText,
+                subtitle_text: useRealWords ? null : subText,
+                words: useRealWords ? transcribedWords : null,
+                subtitles_are_absolute: useRealWords,
                 subtitle_preset: subPreset,
                 burn_subtitles: burnSubs
             };
@@ -1252,9 +1580,34 @@ Acesse: http://127.0.0.1:8000/docs
             }
         }
 
-        // Carrega lista ao iniciar
         window.addEventListener('DOMContentLoaded', () => {
             loadClipsList();
+            loadPresetsList();
+            const canvas = document.getElementById('facecam-canvas');
+            if (canvas) {
+                canvas.addEventListener('mousedown', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                });
+                canvas.addEventListener('mouseup', (e) => {
+                    if (!dragStart) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const x2 = e.clientX - rect.left;
+                    const y2 = e.clientY - rect.top;
+                    const sx = srcWidth / rect.width;
+                    const sy = srcHeight / rect.height;
+                    const rx = Math.round(Math.min(dragStart.x, x2) * sx);
+                    const ry = Math.round(Math.min(dragStart.y, y2) * sy);
+                    const rw = Math.max(80, Math.round(Math.abs(x2 - dragStart.x) * sx));
+                    const rh = Math.max(80, Math.round(Math.abs(y2 - dragStart.y) * sy));
+                    document.getElementById('fc_x').value = rx;
+                    document.getElementById('fc_y').value = ry;
+                    document.getElementById('fc_w').value = rw;
+                    document.getElementById('fc_h').value = rh;
+                    dragStart = null;
+                    drawFacecamCanvas();
+                });
+            }
         });
     </script>
 </body>

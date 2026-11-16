@@ -191,3 +191,35 @@ class LayoutEngine:
             raise RuntimeError(f"FFmpeg falhou ao gerar preview do layout: {res.stderr}")
 
         return out_p
+
+    def extract_source_frame(
+        self,
+        video_path: str | Path,
+        timestamp_s: float,
+        output_image_path: str | Path,
+    ) -> Dict[str, Any]:
+        """Extrai um frame original da origem (sem crop) e retorna suas dimensões."""
+        source_w, source_h = self.get_source_dimensions(video_path)
+        out_p = Path(output_image_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            self.ffmpeg_bin,
+            "-loglevel", "error",
+            "-y",
+            "-ss", str(max(0.0, float(timestamp_s))),
+            "-i", str(video_path),
+            "-vframes", "1",
+            "-q:v", "2",
+            str(out_p),
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0 or not out_p.is_file():
+            raise RuntimeError(f"FFmpeg falhou ao extrair frame de origem: {res.stderr}")
+
+        return {
+            "image_path": str(out_p),
+            "source_width": source_w,
+            "source_height": source_h,
+            "timestamp_s": float(timestamp_s),
+        }

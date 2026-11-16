@@ -106,6 +106,16 @@ class SQLiteStore:
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS channel_presets (
+                    channel_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    layout_mode TEXT NOT NULL,
+                    facecam_rect_json TEXT,
+                    gameplay_rect_json TEXT,
+                    stacked_facecam_height INTEGER NOT NULL DEFAULT 720,
+                    updated_at REAL NOT NULL
+                );
                 """
             )
 
@@ -122,6 +132,62 @@ class SQLiteStore:
                 (project_id, name, slug, now),
             )
             return {"project_id": project_id, "name": name, "slug": slug, "created_at": now}
+
+    # --- Presets de Layout por Canal ---
+
+    def save_channel_preset(
+        self,
+        channel_id: str,
+        name: str,
+        layout_mode: str,
+        facecam_rect: Optional[Dict[str, int]] = None,
+        gameplay_rect: Optional[Dict[str, int]] = None,
+        stacked_facecam_height: int = 720,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        fc_json = json.dumps(facecam_rect) if facecam_rect else None
+        gp_json = json.dumps(gameplay_rect) if gameplay_rect else None
+        with self._lock, self.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO channel_presets
+                (channel_id, name, layout_mode, facecam_rect_json, gameplay_rect_json, stacked_facecam_height, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (channel_id, name, layout_mode, fc_json, gp_json, int(stacked_facecam_height), now),
+            )
+        return {
+            "channel_id": channel_id,
+            "name": name,
+            "layout_mode": layout_mode,
+            "facecam_rect": facecam_rect,
+            "gameplay_rect": gameplay_rect,
+            "stacked_facecam_height": int(stacked_facecam_height),
+            "updated_at": now,
+        }
+
+    def get_channel_preset(self, channel_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock, self.connect() as conn:
+            row = conn.execute("SELECT * FROM channel_presets WHERE channel_id = ?", (channel_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_preset(row)
+
+    def list_channel_presets(self) -> List[Dict[str, Any]]:
+        with self._lock, self.connect() as conn:
+            rows = conn.execute("SELECT * FROM channel_presets ORDER BY updated_at DESC").fetchall()
+            return [self._row_to_preset(r) for r in rows]
+
+    def _row_to_preset(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "channel_id": row["channel_id"],
+            "name": row["name"],
+            "layout_mode": row["layout_mode"],
+            "facecam_rect": json.loads(row["facecam_rect_json"]) if row["facecam_rect_json"] else None,
+            "gameplay_rect": json.loads(row["gameplay_rect_json"]) if row["gameplay_rect_json"] else None,
+            "stacked_facecam_height": int(row["stacked_facecam_height"]),
+            "updated_at": float(row["updated_at"]),
+        }
 
     # --- Fontes ---
 
