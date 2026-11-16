@@ -253,12 +253,13 @@ flowchart LR
 
 ---
 
-## 10. Status do Sprint 0
+## 10. Status de execução (atualizado em 2026-11-16)
 
-- [x] 0.1 Corrigir a sincronia relativa da legenda + teste com início ≠ 0
-- [x] 0.2 Fechar CORS, `Host` e caminhos permitidos
-- [x] 0.3 Restaurar a especificação do Studio Classic em `tests/legacy/test_studio_classic.py`
-- [x] 0.4 Remover a lista de arquivos do `pytest.ini` e publicar os números reais
-- [x] 0.5 / 0.6 `pyproject.toml` com extras; `faster-whisper 1.2.1` + `yt-dlp 2026.10.26` instalados; CUDA validado (`cuda_device_count = 1`)
-- [x] 0.8 Rotular fila em memória e cofre base64 como protótipos no código
-- [ ] 0.7 Push para o GitHub (aguardando autorização explícita)
+- **Sprint 0 — Estabilização:** concluído (`5979ea1`) — 0.1 a 0.6 e 0.8 concluídos; `0.7` (`git push`) aguardando autorização explícita.
+- **Sprint 1 — VOD → clipe com legenda real:** concluído (`bda40b1`) — SQLite WAL, ingestão `yt-dlp`/local, `faster-whisper` CUDA + cache SHA-256, `render_core.py`.
+- **Sprint 2 — Enquadramento e presets:** concluído (`e7dbf8d`) — prévia de frame/layout 9:16, detector de Facecam, presets por canal em SQLite, canvas no Studio.
+- **Sprint 3 — Sugestão de momentos e lote:** concluído (`b2978ad`) — `MomentSuggester` com snap de palavra/frase, lote em fila SQLite, atalhos e `fastclipper/web/studio.html`.
+- **Sprint 4 — Pacote de publicação e métricas:** concluído (`7dc0c3f` + UI em `studio.html`) — `PackageExporter`, `generate_post_copy`, `clip_results` em SQLite.
+- **Gates pendentes (validação com operação real):**
+  - [ ] **Gate A:** produzir 10 clipes publicáveis sem retoque externo a partir de 3 VODs reais autorizados na RTX 3050 6 GB.
+  - [ ] **Gate B:** ≥ 50 clipes publicados com views e receita registradas antes de iniciar o **Sprint 5 (executável)**.

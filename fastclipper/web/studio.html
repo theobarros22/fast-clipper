@@ -322,6 +322,7 @@
     <div class="tabs">
         <div class="tab-group">
             <button class="tab-btn active" onclick="switchTab('studio')">Estúdio de Clipping 9:16</button>
+            <button class="tab-btn" onclick="switchTab('results')">Exportação & Receita</button>
             <button class="tab-btn" onclick="switchTab('control')">Control Plane & Métricas</button>
         </div>
         <div class="shortcut-hint">Atalhos: [I] Início · [O] Fim · [Ctrl+Enter] Renderizar</div>
@@ -486,6 +487,8 @@
                         O clipe renderizado aparecerá aqui pronto para assistir e baixar.
                     </div>
                 </div>
+                <button id="btn-export-quick" type="button" class="chip" onclick="exportCurrentClipQuick()" style="display:none; margin:0 auto;">📦 Exportar Pacote (MP4 + SRT + Capa + Copy)</button>
+                <div id="export-quick-status" style="font-size:12px; margin-top:8px; color:var(--ok); display:none;"></div>
             </div>
 
             <div class="panel">
@@ -500,7 +503,63 @@
         </div>
     </div>
 
-    <!-- TAB 2: PLANO DE CONTROLE & METRICAS -->
+    <!-- TAB 2: EXPORTACAO & RECEITA -->
+    <div id="tab-results" style="display: none;">
+        <div class="grid-3">
+            <div class="metric-card">
+                <h3>Clipes Publicados</h3>
+                <div id="res-total-posts" class="val">0</div>
+                <div class="subtext">Registrados no SQLite</div>
+            </div>
+            <div class="metric-card">
+                <h3>Views (7 dias)</h3>
+                <div id="res-total-views" class="val">0</div>
+                <div class="subtext">Soma entre plataformas</div>
+            </div>
+            <div class="metric-card">
+                <h3>Receita Acumulada</h3>
+                <div id="res-total-rev" class="val">R$ 0,00</div>
+                <div class="subtext">Acompanhamento do Gate B</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">Registrar Resultado de Clipe Publicado</div>
+            <div class="row-2">
+                <div class="field">
+                    <label class="label">Arquivo do Clipe</label>
+                    <input type="text" id="res_clip_filename" class="input-text" placeholder="Ex: clip_abc123_9x16.mp4">
+                </div>
+                <div class="field">
+                    <label class="label">Plataforma</label>
+                    <select id="res_platform" class="select-box">
+                        <option value="tiktok">TikTok</option>
+                        <option value="shorts">YouTube Shorts</option>
+                        <option value="reels">Instagram Reels</option>
+                        <option value="youtube">YouTube</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row-2">
+                <div class="field">
+                    <label class="label">Views (7d)</label>
+                    <input type="number" id="res_views_7d" class="input-text" value="0">
+                </div>
+                <div class="field">
+                    <label class="label">Receita (R$)</label>
+                    <input type="number" step="0.01" id="res_revenue" class="input-text" value="0.00">
+                </div>
+            </div>
+            <button type="button" class="btn-render" onclick="saveClipResult()">💾 Salvar Resultado</button>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">Histórico de Publicações</div>
+            <div id="results-list" class="clip-list"></div>
+        </div>
+    </div>
+
+    <!-- TAB 3: PLANO DE CONTROLE & METRICAS -->
     <div id="tab-control" style="display: none;">
         <div class="grid-3">
             <div class="metric-card">
@@ -540,6 +599,7 @@ Acesse: http://127.0.0.1:8000/docs
 
     <script>
         let currentLayout = 'solo';
+        let currentClipFilename = null;
         let transcribedWords = null;
         let lastSuggestions = [];
         let previewImgObj = null;
@@ -549,14 +609,20 @@ Acesse: http://127.0.0.1:8000/docs
         let savedPresetsMap = {};
 
         function switchTab(tab) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            const btns = document.querySelectorAll('.tab-btn');
+            btns.forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-studio').style.display = 'none';
+            document.getElementById('tab-results').style.display = 'none';
+            document.getElementById('tab-control').style.display = 'none';
             if (tab === 'studio') {
-                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                btns[0].classList.add('active');
                 document.getElementById('tab-studio').style.display = 'grid';
-                document.getElementById('tab-control').style.display = 'none';
+            } else if (tab === 'results') {
+                btns[1].classList.add('active');
+                document.getElementById('tab-results').style.display = 'block';
+                loadResults();
             } else {
-                document.querySelectorAll('.tab-btn')[1].classList.add('active');
-                document.getElementById('tab-studio').style.display = 'none';
+                btns[2].classList.add('active');
                 document.getElementById('tab-control').style.display = 'block';
             }
         }
@@ -891,6 +957,13 @@ Acesse: http://127.0.0.1:8000/docs
             const source = document.getElementById('video-source');
             const placeholder = document.getElementById('video-placeholder');
             const dlBtn = document.getElementById('btn-download-clip');
+            const expBtn = document.getElementById('btn-export-quick');
+
+            currentClipFilename = filename || null;
+            if (currentClipFilename) {
+                document.getElementById('res_clip_filename').value = currentClipFilename;
+                expBtn.style.display = 'inline-block';
+            }
 
             placeholder.style.display = 'none';
             player.style.display = 'block';
@@ -901,6 +974,75 @@ Acesse: http://127.0.0.1:8000/docs
             dlBtn.href = url;
             dlBtn.style.display = 'inline';
             dlBtn.download = filename || 'clipe_9x16.mp4';
+        }
+
+        async function exportCurrentClipQuick() {
+            if (!currentClipFilename) return;
+            const st = document.getElementById('export-quick-status');
+            const txt = document.getElementById('subtitle_text').value.trim();
+            const resCopy = await fetch('/api/v1/studio/generate-copy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transcript_text: txt || 'Corte da live', platform: 'tiktok' })
+            });
+            const copy = await resCopy.json();
+            const resExp = await fetch('/api/v1/studio/export-package', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clip_filename: currentClipFilename,
+                    platform: 'tiktok',
+                    title: copy.title,
+                    description: copy.description,
+                    hashtags: copy.hashtags,
+                    words: transcribedWords
+                })
+            });
+            const data = await resExp.json();
+            st.style.display = 'block';
+            if (resExp.ok) {
+                st.style.color = 'var(--ok)';
+                st.innerText = `✅ Pacote salvo em: ${data.package_dir}`;
+            } else {
+                st.style.color = 'var(--error)';
+                st.innerText = `❌ ${data.detail || 'Erro ao exportar pacote'}`;
+            }
+        }
+
+        async function saveClipResult() {
+            const clipFilename = document.getElementById('res_clip_filename').value.trim();
+            if (!clipFilename) return alert('Informe o nome do arquivo do clipe.');
+            const res = await fetch('/api/v1/studio/results', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clip_filename: clipFilename,
+                    platform: document.getElementById('res_platform').value,
+                    views_7d: parseInt(document.getElementById('res_views_7d').value, 10) || 0,
+                    revenue_brl: parseFloat(document.getElementById('res_revenue').value) || 0.0,
+                    layout_mode: currentLayout
+                })
+            });
+            if (res.ok) loadResults();
+        }
+
+        async function loadResults() {
+            const res = await fetch('/api/v1/studio/results');
+            if (!res.ok) return;
+            const data = await res.json();
+            const tot = data.summary.totals;
+            document.getElementById('res-total-posts').innerText = tot.total_posts;
+            document.getElementById('res-total-views').innerText = tot.total_views_7d;
+            document.getElementById('res-total-rev').innerText = `R$ ${Number(tot.total_revenue_brl).toFixed(2)}`;
+            const list = document.getElementById('results-list');
+            list.innerHTML = (data.results || []).map(r => `
+                <div class="clip-item">
+                    <div>
+                        <strong>${r.clip_filename}</strong> · ${r.platform.toUpperCase()}<br>
+                        <span style="font-size:11.5px; color:var(--muted);">${r.views_7d} views · R$ ${Number(r.revenue_brl).toFixed(2)}</span>
+                    </div>
+                </div>
+            `).join('') || '<div style="font-size:13px; color:var(--muted); padding:12px;">Nenhum resultado registrado ainda.</div>';
         }
 
         async function loadClipsList() {
