@@ -1,3 +1,5 @@
+> **SUBSTITUÍDO** em 2026-11-16 por [plano-mestre-v3.md](plano-mestre-v3.md). Mantido apenas como histórico; o estado real e as prioridades estão no v3.
+
 # Fast Clipper — Plano Mestre de Ação, Arquitetura e Desenvolvimento (M0 a M6)
 
 **Documento:** Plano Operacional e Arquitetural de Engenharia  
