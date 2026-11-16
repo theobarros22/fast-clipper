@@ -103,5 +103,24 @@ def test_source_video_stream_and_delete_clip():
     res_del_404 = client.delete(f"/api/v1/studio/clips/{fname}")
     assert res_del_404.status_code == 404
 
+
+def test_studio_upload_local_video():
+    if not SYNTHETIC_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    client = TestClient(app)
+    bad_ext = client.post("/api/v1/studio/sources/upload?filename=malware.exe", content=b"123")
+    assert bad_ext.status_code == 400
+
+    empty = client.post("/api/v1/studio/sources/upload?filename=empty.mp4", content=b"")
+    assert empty.status_code == 400
+
+    raw = SYNTHETIC_VIDEO.read_bytes()
+    up = client.post("/api/v1/studio/sources/upload?filename=meu_obs.mp4", content=raw)
+    assert up.status_code == 200, up.text
+    uploaded_path = Path(up.json()["file_path"])
+    assert uploaded_path.is_file()
+    uploaded_path.unlink(missing_ok=True)
+
     res_trav = client.delete("/api/v1/studio/clips/..%5C..%5CREADME.md")
     assert res_trav.status_code in (403, 404)

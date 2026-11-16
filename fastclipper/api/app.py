@@ -9,6 +9,7 @@ controle de turnos, fila assíncrona durável e cofre de redes sociais.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import time
@@ -643,6 +644,55 @@ def studio_import_source(req: ImportSourceRequest):
             title=req.title,
         )
     except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/studio/sources/upload", tags=["Studio"])
+async def studio_upload_source(
+    request: Request,
+    filename: str = Query(...),
+    authorization_ref: str = Query("ARQUIVO-LOCAL"),
+    project_id: str = Query("proj_default"),
+):
+    """Recebe upload binário em streaming do computador, valida e registra no projeto."""
+    raw_name = Path(filename).name
+    if not raw_name or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+
+    ext = Path(raw_name).suffix.lower()
+    if ext not in {".mp4", ".mov", ".mkv", ".webm", ".avi", ".ts"}:
+        raise HTTPException(status_code=400, detail=f"Formato não suportado para upload: {ext}")
+
+    safe_name = re.sub(r"[^a-zA-Z0-9._-]+", "_", raw_name).strip("._") or f"upload{ext}"
+    if not safe_name.lower().endswith(ext):
+        safe_name = f"{safe_name}{ext}"
+
+    dest_dir = ROOT / "data" / "projects" / project_id / "source"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = (dest_dir / f"{int(time.time())}_{safe_name}").resolve()
+    if dest_path.parent != dest_dir.resolve():
+        raise HTTPException(status_code=403, detail="Destino de upload inválido.")
+
+    total_bytes = 0
+    with open(dest_path, "wb") as out_f:
+        async for chunk in request.stream():
+            if chunk:
+                out_f.write(chunk)
+                total_bytes += len(chunk)
+
+    if total_bytes == 0:
+        dest_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Arquivo enviado está vazio.")
+
+    try:
+        return vod_ingestor.import_local_file(
+            file_path=dest_path,
+            authorization_ref=authorization_ref,
+            project_id=project_id,
+            title=Path(raw_name).stem,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        dest_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc))
 
 

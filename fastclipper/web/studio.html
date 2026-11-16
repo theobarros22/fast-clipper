@@ -404,9 +404,13 @@
 
                 <div class="field">
                     <label class="label" for="video_path">Caminho do vídeo (em data/ ou tests/fixtures/)</label>
-                    <input type="text" id="video_path" class="input-text"
-                           value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
-                           placeholder="Ex: data/projects/meu_canal/source/live.mp4">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="text" id="video_path" class="input-text" style="flex:1;"
+                               value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
+                               placeholder="Ex: data/projects/meu_canal/source/live.mp4">
+                        <input type="file" id="local-video-upload" accept="video/*,.mkv,.ts" style="display:none;">
+                        <button type="button" id="btn-upload-local" class="chip" style="white-space:nowrap;">Enviar do PC</button>
+                    </div>
                 </div>
 
                 <div class="source-player-box">
@@ -1061,6 +1065,32 @@ http://127.0.0.1:8000/docs</div>
                     livePollTimer = null;
                 }
             } catch (_) {}
+        }
+
+        async function uploadLocalVideoFile(file) {
+            if (!file) return;
+            const btn = document.getElementById('btn-upload-local');
+            btn.disabled = true;
+            setStatus(`Enviando "${file.name}" para o projeto...`, 'busy', 35);
+            try {
+                const url = `/api/v1/studio/sources/upload?filename=${encodeURIComponent(file.name)}&authorization_ref=ARQUIVO-LOCAL`;
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: file,
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.detail || `Erro ${resp.status}`);
+                document.getElementById('video_path').value = data.file_path;
+                transcribedWords = null;
+                await loadSourcesList();
+                await loadSourceVideo();
+                setStatus(`Vídeo "${file.name}" enviado e pronto para corte.`, 'idle');
+            } catch (err) {
+                setStatus(`Erro no upload: ${err.message}`, 'err');
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         async function loadStorageStats() {
@@ -1736,6 +1766,14 @@ http://127.0.0.1:8000/docs</div>
                 }
             });
             document.getElementById('btn-download-vod').addEventListener('click', downloadSourceUrl);
+            document.getElementById('btn-upload-local').addEventListener('click', () => {
+                document.getElementById('local-video-upload').click();
+            });
+            document.getElementById('local-video-upload').addEventListener('change', (e) => {
+                const f = e.target.files && e.target.files[0];
+                if (f) uploadLocalVideoFile(f);
+                e.target.value = '';
+            });
             document.getElementById('btn-suggest').addEventListener('click', suggestMoments);
             document.getElementById('btn-batch-render').addEventListener('click', renderBatchSelected);
             document.getElementById('card-solo').addEventListener('click', () => selectLayout('solo'));
