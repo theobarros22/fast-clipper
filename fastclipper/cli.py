@@ -89,6 +89,31 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_precheck(args: argparse.Namespace) -> int:
+    """Executa diagnóstico preliminar de mídia antes de computação pesada (Media Pre-check)."""
+    from fastclipper.ingest.precheck import MediaPrechecker
+
+    video_path = Path(args.video) if args.video else ROOT / "tests" / "fixtures" / "synthetic" / "sintetico_gameplay_facecam.mp4"
+    print("=" * 65)
+    print("FAST CLIPPER — MEDIA PRE-CHECK GUARD (INSPIRADO EM AUTOCLIP)")
+    print("=" * 65)
+    print(f"Arquivo Alvo: {video_path}")
+    print("-" * 65)
+
+    checker = MediaPrechecker(min_duration_s=args.min_duration)
+    res = checker.probe(video_path, require_audio=not args.no_audio_ok)
+
+    print(f"Status Validação : {'[APROVADO]' if res.is_valid else '[REJEITADO]'}")
+    print(f"Código Diagnóstico: {res.status.value}")
+    print(f"Duração          : {res.duration_s:.2f}s" if res.duration_s else "Duração          : Indisponível")
+    print(f"Vídeo Presente   : {res.has_video} ({res.width}x{res.height} @ {res.fps} fps)" if res.has_video else "Vídeo Presente   : Não")
+    print(f"Áudio Presente   : {res.has_audio}")
+    print(f"Mensagem         : {res.message}")
+    print("=" * 65)
+
+    return 0 if res.is_valid else 1
+
+
 def cmd_simulate(args: argparse.Namespace) -> int:
     """Executa simulação de live com buffer rolante e renderização 9:16."""
     caminho_video = Path(args.video) if args.video else ROOT / "tests" / "fixtures" / "synthetic" / "sintetico_gameplay_facecam.mp4"
@@ -456,6 +481,13 @@ def main():
     # status
     p_status = subparsers.add_parser("status", help="Diagnóstico do sistema, GPU e dependências (M0)")
     p_status.set_defaults(func=cmd_status)
+
+    # precheck
+    p_pre = subparsers.add_parser("precheck", help="Sonda preliminar estrita de mídia antes de computação (AutoClip)")
+    p_pre.add_argument("--video", "-v", type=str, help="Caminho do arquivo de vídeo a ser verificado")
+    p_pre.add_argument("--min-duration", type=float, default=5.0, help="Duração mínima em segundos")
+    p_pre.add_argument("--no-audio-ok", action="store_true", help="Permitir mídia sem áudio")
+    p_pre.set_defaults(func=cmd_precheck)
 
     # simulate
     p_sim = subparsers.add_parser("simulate", help="Simulação de live e marcação de buffer (M1/M2)")

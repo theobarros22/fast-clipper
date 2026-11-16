@@ -29,6 +29,24 @@ def test_cli_status():
     assert ret == 0
 
 
+def test_cli_precheck_valid():
+    from fastclipper.cli import cmd_precheck
+    root = Path(__file__).resolve().parents[1]
+    video = root / "tests" / "fixtures" / "synthetic" / "sintetico_gameplay_facecam.mp4"
+    args = DummyArgs(video=str(video), min_duration=2.0, no_audio_ok=False)
+    ret = cmd_precheck(args)
+    assert ret == 0
+
+
+def test_cli_precheck_invalid():
+    from fastclipper.cli import cmd_precheck
+    root = Path(__file__).resolve().parents[1]
+    video = root / "tests" / "fixtures" / "synthetic" / "sintetico_sem_audio.mp4"
+    args = DummyArgs(video=str(video), min_duration=1.0, no_audio_ok=False)
+    ret = cmd_precheck(args)
+    assert ret == 1
+
+
 def test_cli_analyze():
     args = DummyArgs(audio_threshold=2.5, chat_threshold=2.0)
     ret = cmd_analyze(args)

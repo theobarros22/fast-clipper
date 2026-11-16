@@ -20,6 +20,7 @@ from fastclipper.ingest.marker import CandidateClip, CandidateStatus
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode
 from fastclipper.layouts.engine import LayoutEngine
 from fastclipper.layouts.scene_detector import SceneDetector
+from fastclipper.rendering.encoder import HardwareEncoderManager, SOFTWARE_ENCODER
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class IsolatedRenderAdapter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.ffmpeg_bin = ffmpeg_bin or shutil.which("ffmpeg") or "ffmpeg"
         self.ffprobe_bin = ffprobe_bin or shutil.which("ffprobe") or "ffprobe"
+        self.encoder_manager = HardwareEncoderManager(ffmpeg_bin=self.ffmpeg_bin)
 
     def render_candidate(
         self,
@@ -212,15 +214,19 @@ class IsolatedRenderAdapter:
                 filtro_v = layout_engine.build_filter_graph(layout_config, source_w, source_h)
             cmd.extend(["-vf", filtro_v])
 
-        cmd.extend([
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            str(output_path),
-        ])
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        enc = self.encoder_manager.get_encoder()
+        enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
+
+        full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
+        res = subprocess.run(full_cmd, capture_output=True, text=True)
+
+        if res.returncode != 0 and enc != SOFTWARE_ENCODER:
+            logger.warning("Hardware encoder '%s' falhou. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
+            self.encoder_manager.mark_broken(enc)
+            sw_args = self.encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
+            full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
+            res = subprocess.run(full_cmd, capture_output=True, text=True)
+
         if res.returncode != 0:
             logger.error("Erro no FFmpeg: %s", res.stderr)
             return False
@@ -279,15 +285,19 @@ class IsolatedRenderAdapter:
                     filtro_v = layout_engine.build_filter_graph(layout_config, source_w, source_h)
                 cmd.extend(["-vf", filtro_v])
 
-            cmd.extend([
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-pix_fmt", "yuv420p",
-                "-c:a", "aac",
-                "-b:a", "128k",
-                str(output_path),
-            ])
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            enc = self.encoder_manager.get_encoder()
+            enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
+
+            full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
+            res = subprocess.run(full_cmd, capture_output=True, text=True)
+
+            if res.returncode != 0 and enc != SOFTWARE_ENCODER:
+                logger.warning("Hardware encoder '%s' falhou no buffer. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
+                self.encoder_manager.mark_broken(enc)
+                sw_args = self.encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
+                full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
+                res = subprocess.run(full_cmd, capture_output=True, text=True)
+
             return res.returncode == 0
         finally:
             if concat_file.exists():
