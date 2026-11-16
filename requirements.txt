@@ -1,0 +1,18 @@
+anthropic
+gradio
+matplotlib
+mediapipe
+numpy
+openai-whisper
+opencv-python
+pydub
+pyinstaller
+pytest      # a suite usa fixtures de pytest; unittest ignora 41 testes
+pywebview  # janela nativa (WebView2) — o app nao abre mais no navegador
+torch
+
+# Performance e novas funcionalidades (04/07/2026) — todas com fallback:
+# o app funciona sem elas, mas fica mais rápido/completo com elas.
+scenedetect
+faster-whisper
+yt-dlp
