@@ -428,14 +428,28 @@ def cmd_queue(args: argparse.Namespace) -> int:
         print(f"Tarefa enfileirada: ID={job.job_id} | Status={job.status.value} | Key={job.idempotency_key}")
 
     elif args.subcmd == "worker":
-        print(f"Iniciando Worker ID: {args.worker_id or 'worker-01'}...")
-        leased = queue.lease_next_job(worker_id=args.worker_id or "worker-01", lease_duration_s=15.0)
-        if leased:
-            print(f"Tarefa adquirida: ID={leased.job_id} | Tipo={leased.job_type} | Org={leased.org_id}")
-            queue.complete_job(leased.job_id, result={"output": "clipe_finalizado.mp4"})
-            print(f"Tarefa {leased.job_id} concluída com sucesso.")
+        worker_id = args.worker_id or "worker-01"
+        print(f"Iniciando Worker ID: {worker_id}...")
+
+        if getattr(args, "run_pipeline", False):
+            from fastclipper.rendering.pipeline_runner import PipelineRunner
+            runner = PipelineRunner(queue=queue, worker_id=worker_id)
+            res = runner.run_single_step()
+            if res:
+                if res.success:
+                    print(f"🎉 Job {res.job_id} executado com sucesso: {res.output_video_path} ({res.duration:.2f}s)")
+                else:
+                    print(f"❌ Job {res.job_id} falhou: {res.error}")
+            else:
+                print("Nenhuma tarefa pendente na fila.")
         else:
-            print("Nenhuma tarefa pendente na fila.")
+            leased = queue.lease_next_job(worker_id=worker_id, lease_duration_s=15.0)
+            if leased:
+                print(f"Tarefa adquirida: ID={leased.job_id} | Tipo={leased.job_type} | Org={leased.org_id}")
+                queue.complete_job(leased.job_id, worker_id=worker_id, result={"output": "clipe_finalizado.mp4"})
+                print(f"Tarefa {leased.job_id} concluída com sucesso.")
+            else:
+                print("Nenhuma tarefa pendente na fila.")
 
     return 0
 
@@ -549,6 +563,7 @@ def main():
     p_q.add_argument("--key", type=str, help="Chave de idempotência")
     p_q.add_argument("--worker-id", type=str, default="worker-01", help="ID do worker")
     p_q.add_argument("--db", type=str, default=":memory:", help="Caminho do banco SQLite da fila")
+    p_q.add_argument("--run-pipeline", action="store_true", help="Executar renderização real de mídia no worker")
     p_q.set_defaults(func=cmd_queue)
 
     # vault

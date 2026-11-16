@@ -3,7 +3,7 @@
 **Documento:** Plano Operacional e Arquitetural de Engenharia  
 **Versão:** 2.0.0 (Revisada e Expandida)  
 **Data:** 2026-11-16  
-**Status:** Marcos M0 a M6 Concluídos e Verificados (51 Testes Automatizados Aprovados)  
+**Status:** Marcos M0 a M6 e Fase 1 Concluídos (88 Testes Automatizados Aprovados)  
 **Referência Estratégica:** `docs/plano-fast-clipper.md`  
 **Escopo:** Transição da base monolítica local (Viral Cutter Classic) para a plataforma distribuída, colaborativa e multiusuário do Fast Clipper.
 
@@ -369,9 +369,13 @@ Todos os sete marcos estruturais (M0 a M6) foram integralmente implementados, de
 | **M4 — Sugestões Multimodais** | `fastclipper/signals/audio_analyzer.py`, `chat_analyzer.py`, `transcription_indexer.py`, `aggregator.py`, `evaluator.py` | Concluído | 6 testes em `test_m4_assisted_suggestions.py` |
 | **M5 — Comparação Cross-POV** | `fastclipper/multicreator/models.py`, `sync.py`, `renderer.py` (renderização split-screen/sequencial, bloqueio de fonte não autorizada) | Concluído | 6 testes em `test_m5_multicreator_comparison.py` |
 | **M6 — Fila, Live & Redes** | `fastclipper/live/youtube_live.py` (SSRF guard), `fastclipper/queue/durable_queue.py` (idempotência, leases), `fastclipper/social/oauth_vault.py` (cofre, kill switch) | Concluído | 7 testes em `test_m6_live_queue_and_distribution.py` |
-| **CLI & Orquestrador Unificado** | `fastclipper/cli.py`, `fastclipper/__main__.py`, `tools/fastclipper_cli.py` | Concluído | 9 testes em `tests/test_cli.py` |
+| **CLI & Orquestrador Unificado** | `fastclipper/cli.py`, `fastclipper/__main__.py`, `tools/fastclipper_cli.py` | Concluído | 11 testes em `tests/test_cli.py` |
+| **Melhorias AutoClip** | `precheck.py`, `encoder.py`, `clustering.py`, `boundaries.py`, `child_guard.py` | Concluído | 14 testes em `test_autoclip_enhancements.py` |
+| **Motor de Legendas Verticais** | `subtitles/engine.py`, `models.py` (anti-blink, presets, word timings, ASS/SRT) | Concluído | 5 testes em `test_subtitles.py` |
+| **Plano de Controle API Web** | `api/app.py` (FastAPI REST, Dashboard Calm Premium, turnos, locking otimista) | Concluído | 8 testes em `test_api.py` |
+| **Pipeline Runner & Background Worker** | `rendering/pipeline_runner.py` (processamento ponta a ponta da fila, queima de legendas, precheck, comparação) | Concluído | 8 testes em `test_pipeline_runner.py` |
 
-**Resultado Geral da Suíte de Testes:** **51 testes executados, 51 aprovados (100% de sucesso)** em 7.89s.
+**Resultado Geral da Suíte de Testes:** **88 testes executados, 88 aprovados (100% de sucesso)** em 13.10s.
 
 ---
 

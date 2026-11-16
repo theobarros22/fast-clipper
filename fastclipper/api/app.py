@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Header, Query, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Header, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -30,6 +30,7 @@ from fastclipper.collaboration.service import (
 from fastclipper.ingest.precheck import MediaPrechecker
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.encoder import HardwareEncoderManager
+from fastclipper.rendering.pipeline_runner import PipelineRunner
 from fastclipper.social.oauth_vault import OAuthTokenVault, SocialPlatform
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,6 +55,7 @@ durable_queue = DurableTaskQueue()
 encoder_manager = HardwareEncoderManager()
 social_vault = OAuthTokenVault()
 prechecker = MediaPrechecker()
+pipeline_runner = PipelineRunner(queue=durable_queue)
 
 # Registra organização e usuário padrão para demonstração imediata
 collab_service.register_organization(org_id="org_default", nome="Agência Alfa", slug="alfa")
@@ -284,6 +286,26 @@ def get_job_status(job_id: str):
     return job.to_dict()
 
 
+@app.post("/api/v1/queue/worker/process-next", tags=["Fila"])
+def process_next_queued_job():
+    """Aciona o PipelineRunner para processar o próximo trabalho da fila."""
+    res = pipeline_runner.run_single_step()
+    if not res:
+        return {"processed": False, "message": "Nenhum trabalho pendente na fila."}
+    return {"processed": True, "result": res.to_dict()}
+
+
+@app.post("/api/v1/queue/jobs/{job_id}/dispatch", tags=["Fila"])
+def dispatch_job_background(job_id: str, background_tasks: BackgroundTasks):
+    """Despacha a execução de um trabalho específico em background."""
+    job = durable_queue.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job não encontrado")
+
+    background_tasks.add_task(pipeline_runner.process_job, job)
+    return {"status": "dispatched", "job_id": job_id}
+
+
 # -----------------------------------------------------------------------------
 # Rotas do Cofre Social & Kill Switch (M6)
 # -----------------------------------------------------------------------------
@@ -468,7 +490,7 @@ def get_dashboard():
         <div class="brand">Fast<span>Clipper</span> <span style="font-size: 14px; color: var(--muted); font-weight: normal;">| Control Plane</span></div>
         <div class="status-badge">
             <div class="badge-dot"></div>
-            SISTEMA OPERACIONAL (67 TESTES VERIFICADOS)
+            SISTEMA OPERACIONAL (88 TESTES VERIFICADOS)
         </div>
     </div>
 
@@ -484,16 +506,16 @@ def get_dashboard():
             <div class="metric-label">Validação estrita de áudio e integridade</div>
         </div>
         <div class="card">
-            <h2>Process Guard</h2>
-            <div class="metric-value">WIN JOB</div>
-            <div class="metric-label">Contenção de zumbis KILL_ON_JOB_CLOSE</div>
+            <h2>Pipeline Runner</h2>
+            <div class="metric-value">EM FILA</div>
+            <div class="metric-label">Processamento 9:16 e queima de legendas ASS/SRT</div>
         </div>
     </div>
 
     <div class="actions-panel">
-        <h2>Operações de Clipping & Controle de Turno</h2>
+        <h2>Operações de Clipping, Fila & Controle de Turno</h2>
         <p style="font-size: 14px; color: var(--sub); margin-bottom: 16px;">
-            Acesse as rotas interativas da API OpenAPI ou execute comandos de turno e pré-verificação.
+            Acesse as rotas interativas da API OpenAPI, despache renderizações na fila ou inspecione o relatório de turno.
         </p>
         <a href="/docs" target="_blank" class="btn">Explorar Swagger OpenAPI</a>
         <a href="/api/v1/shifts/handoff" target="_blank" class="btn btn-secondary">Ver Relatório de Turno Atual</a>
@@ -505,6 +527,9 @@ def get_dashboard():
         <div class="terminal-box">
 # Iniciar o servidor de API e Dashboard local:
 uvicorn fastclipper.api.app:app --host 0.0.0.0 --port 8000
+
+# Executar worker contínuo de renderização da fila:
+python -m fastclipper queue worker --run-pipeline
 
 # Executar diagnóstico preliminar de mídia:
 python -m fastclipper precheck --video tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4
