@@ -924,6 +924,35 @@ def studio_live_stop():
     return live_manager.stop_session()
 
 
+@app.post("/api/v1/studio/live/cleanup", tags=["Studio Live"])
+def studio_live_cleanup():
+    """Remove buffers temporários de transmissões encerradas para liberar espaço."""
+    return live_manager.cleanup_old_buffers()
+
+
+def _dir_size_mb(path: Path) -> float:
+    if not path.exists():
+        return 0.0
+    total = 0
+    for f in path.rglob("*"):
+        if f.is_file():
+            try:
+                total += f.stat().st_size
+            except OSError:
+                pass
+    return round(total / (1024 * 1024), 2)
+
+
+@app.get("/api/v1/studio/storage", tags=["Studio"])
+def studio_storage_stats():
+    """Retorna uso de disco dos clipes gerados, exportações e buffers ao vivo."""
+    return {
+        "output_clips_mb": _dir_size_mb(pipeline_runner.output_dir),
+        "exports_mb": _dir_size_mb(package_exporter.exports_root),
+        "live_buffers_mb": _dir_size_mb(ROOT / "data" / "projects" / "proj_default" / "live"),
+    }
+
+
 @app.post("/api/v1/studio/cancel", tags=["Studio"])
 def studio_cancel_active_render():
     """Solicita cancelamento imediato do FFmpeg e do lote em andamento."""

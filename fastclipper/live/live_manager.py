@@ -672,3 +672,31 @@ class LiveManager:
                 "last_error": None,
             }
         return session.get_status()
+
+    def cleanup_old_buffers(self) -> Dict[str, Any]:
+        """Remove diretórios de buffer de lives encerradas para liberar espaço em disco."""
+        live_root = self.projects_root / "proj_default" / "live"
+        if not live_root.exists():
+            return {"removed_sessions": 0, "freed_mb": 0.0}
+
+        active_id = (
+            self.current_session.session_id
+            if self.current_session and self.current_session.running
+            else None
+        )
+        removed = 0
+        freed_bytes = 0
+        for child in live_root.iterdir():
+            if not child.is_dir():
+                continue
+            if active_id and child.name == active_id:
+                continue
+            for f in child.rglob("*"):
+                if f.is_file():
+                    try:
+                        freed_bytes += f.stat().st_size
+                    except OSError:
+                        pass
+            shutil.rmtree(child, ignore_errors=True)
+            removed += 1
+        return {"removed_sessions": removed, "freed_mb": round(freed_bytes / (1024 * 1024), 2)}

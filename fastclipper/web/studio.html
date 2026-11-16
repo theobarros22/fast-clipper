@@ -457,7 +457,13 @@
                             <input type="text" id="live_keywords" class="input-text" style="flex:1; min-width:220px;" placeholder="Palavras-chave auto-clip (ex: absurdo, olha isso, urgente)">
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s</button>
+                            <select id="live_clip_duration" aria-label="Duração do corte ao vivo" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
+                                <option value="15">15s</option>
+                                <option value="30" selected>30s</option>
+                                <option value="45">45s</option>
+                                <option value="60">60s</option>
+                            </select>
+                            <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s (M)</button>
                             <button type="button" id="btn-live-mark-post" class="chip" disabled>Marcar Agora (+15s)</button>
                             <span id="live-status-text" style="font-size:12px; color:var(--text-muted);">Nenhuma live ativa.</span>
                         </div>
@@ -726,6 +732,14 @@
                 <div id="ctrl-ffmpeg" class="val">--</div>
                 <div class="subtext">Corte e validação do arquivo</div>
             </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">
+                <span>Armazenamento local</span>
+                <button type="button" id="btn-cleanup-live" class="chip">Limpar buffers de lives antigas</button>
+            </div>
+            <div id="ctrl-storage" style="font-size:13px; color:var(--sub);">Carregando uso de disco...</div>
         </div>
 
         <div class="panel">
@@ -1032,6 +1046,28 @@ http://127.0.0.1:8000/docs</div>
                     livePollTimer = null;
                 }
             } catch (_) {}
+        }
+
+        async function loadStorageStats() {
+            const box = document.getElementById('ctrl-storage');
+            if (!box) return;
+            try {
+                const st = await api('/api/v1/studio/storage');
+                box.textContent = `Clipes: ${fmtNum(st.output_clips_mb, 1)} MB · Exportações: ${fmtNum(st.exports_mb, 1)} MB · Buffers ao vivo: ${fmtNum(st.live_buffers_mb, 1)} MB`;
+            } catch (_) {
+                box.textContent = 'Não foi possível consultar o armazenamento.';
+            }
+        }
+
+        async function cleanupLiveBuffers() {
+            setStatus('Limpando buffers de lives encerradas...', 'busy');
+            try {
+                const res = await api('/api/v1/studio/live/cleanup', { method: 'POST' });
+                setStatus(`Limpeza concluída: ${res.removed_sessions} sessão(ões) removida(s), ${fmtNum(res.freed_mb, 1)} MB liberados.`, 'idle');
+                loadStorageStats();
+            } catch (err) {
+                setStatus(`Erro na limpeza: ${err.message}`, 'err');
+            }
         }
 
         async function startLiveCapture() {
@@ -1643,8 +1679,15 @@ http://127.0.0.1:8000/docs</div>
 
             document.getElementById('btn-live-start').addEventListener('click', startLiveCapture);
             document.getElementById('btn-live-stop').addEventListener('click', stopLiveCapture);
-            document.getElementById('btn-live-clip-now').addEventListener('click', () => markLiveClip(30, 0));
+            document.getElementById('live_clip_duration').addEventListener('change', (e) => {
+                document.getElementById('btn-live-clip-now').textContent = `Clipar Últimos ${e.target.value}s (M)`;
+            });
+            document.getElementById('btn-live-clip-now').addEventListener('click', () => {
+                const dur = parseInt(document.getElementById('live_clip_duration').value, 10) || 30;
+                markLiveClip(dur, 0);
+            });
             document.getElementById('btn-live-mark-post').addEventListener('click', () => markLiveClip(15, 15));
+            document.getElementById('btn-cleanup-live').addEventListener('click', cleanupLiveBuffers);
             document.getElementById('btn-download-vod').addEventListener('click', downloadSourceUrl);
             document.getElementById('btn-suggest').addEventListener('click', suggestMoments);
             document.getElementById('btn-batch-render').addEventListener('click', renderBatchSelected);
@@ -1723,6 +1766,9 @@ http://127.0.0.1:8000/docs</div>
                 } else if (e.key.toLowerCase() === 'o') {
                     document.getElementById('fim_s').value = (sp.currentTime || 0).toFixed(1);
                     validateCutBounds();
+                } else if (e.key.toLowerCase() === 'm') {
+                    const btnLive = document.getElementById('btn-live-clip-now');
+                    if (btnLive && !btnLive.disabled) btnLive.click();
                 }
             });
         }
@@ -1733,6 +1779,7 @@ http://127.0.0.1:8000/docs</div>
             const hashTab = (location.hash || '').replace('#', '');
             if (['studio', 'results', 'control'].includes(hashTab)) switchTab(hashTab);
             loadSystemStatus();
+            loadStorageStats();
             loadSourcesList();
             loadClipsList();
             loadPresetsList();

@@ -134,7 +134,18 @@ def test_studio_live_api_endpoints():
     assert home.status_code == 200
     assert "btn-live-start" in home.text
     assert "live_keywords" in home.text
+    assert "live_clip_duration" in home.text
+    assert "btn-cleanup-live" in home.text
     assert "innerHTML" not in home.text
+
+    storage = client.get("/api/v1/studio/storage")
+    assert storage.status_code == 200
+    sjson = storage.json()
+    assert "output_clips_mb" in sjson and "exports_mb" in sjson and "live_buffers_mb" in sjson
+
+    cleanup = client.post("/api/v1/studio/live/cleanup")
+    assert cleanup.status_code == 200
+    assert "removed_sessions" in cleanup.json()
 
 
 def test_live_auto_clip_keywords_trigger(tmp_path):
