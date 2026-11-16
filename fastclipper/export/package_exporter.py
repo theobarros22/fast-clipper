@@ -106,8 +106,14 @@ class PackageExporter:
             encoding="utf-8",
         )
 
+        zip_base = pkg_dir.parent / pkg_dir.name
+        zip_path = Path(shutil.make_archive(str(zip_base), "zip", root_dir=str(pkg_dir)))
+        rel_zip = f"{day_folder}/{zip_path.name}"
+
         return {
             "package_dir": str(pkg_dir.resolve()),
+            "zip_file": str(zip_path.resolve()),
+            "zip_url": f"/api/v1/studio/export-zip/{rel_zip}",
             "video_file": str(out_mp4.resolve()),
             "srt_file": str(out_srt.resolve()) if out_srt else None,
             "cover_file": str(out_cover.resolve()) if out_cover.is_file() else None,

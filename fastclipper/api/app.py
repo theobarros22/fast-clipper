@@ -1072,6 +1072,19 @@ def studio_export_package(req: ExportPackageRequest):
     )
 
 
+@app.get("/api/v1/studio/export-zip/{day}/{zip_name}", tags=["Exportação & Receita"])
+def studio_download_export_zip(day: str, zip_name: str):
+    """Baixa o pacote completo (.zip) gerado em data/exports/."""
+    for part in (day, zip_name):
+        if not part or "/" in part or "\\" in part or ".." in part:
+            raise HTTPException(status_code=403, detail="Caminho de pacote inválido.")
+    exports_root = package_exporter.exports_root.resolve()
+    target = (exports_root / day / zip_name).resolve()
+    if target.parent.parent != exports_root or not target.is_file() or target.suffix.lower() != ".zip":
+        raise HTTPException(status_code=404, detail="Pacote ZIP não encontrado.")
+    return FileResponse(str(target), media_type="application/zip", filename=target.name)
+
+
 @app.post("/api/v1/studio/results", tags=["Exportação & Receita"])
 def studio_save_result(req: ClipResultRequest):
     """Registra views e receita de um clipe publicado no SQLite."""

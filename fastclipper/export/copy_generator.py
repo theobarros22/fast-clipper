@@ -14,6 +14,7 @@ PLATFORM_HASHTAGS: Dict[str, List[str]] = {
     "shorts": ["#shorts", "#youtubeshorts", "#clips", "#gaming", "#cortes"],
     "reels": ["#reels", "#reelsinstagram", "#clips", "#gaming", "#cortes"],
     "youtube": ["#youtube", "#clips", "#highlights", "#gaming", "#cortes"],
+    "x": ["#cortes", "#clips", "#live", "#viral", "#highlights"],
 }
 
 
