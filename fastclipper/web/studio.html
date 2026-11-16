@@ -6,26 +6,24 @@
     <title>Fast Clipper — Studio Local 9:16</title>
     <style>
         :root {
-            --bg: #F8F7F5;
-            --card: #FFFFFF;
-            --ink: #191817;
-            --sub: #66635F;
-            --muted: #8B8781;
-            --line: #E8E6E1;
-            --accent: #2563EB;
-            --accent-hover: #1D4ED8;
-            --accent-soft: #EFF6FF;
-            --cta-bg: #191817;
-            --cta-fg: #FFFFFF;
-            --ok: #16A34A;
-            --ok-soft: #F0FDF4;
-            --warn: #D97706;
-            --warn-soft: #FFFBEB;
-            --error: #DC2626;
-            --error-soft: #FEF2F2;
-            --radius-sm: 8px;
-            --radius-md: 14px;
-            --radius-lg: 18px;
+            --bg: #111317;
+            --card: #181B20;
+            --raised: #20242B;
+            --ink: #EEF1F5;
+            --sub: #B5BDCA;
+            --muted: #9AA3B2;
+            --line: #2C323C;
+            --accent: #3B82F6;
+            --accent-hover: #2563EB;
+            --accent-soft: rgba(59, 130, 246, 0.16);
+            --ok: #22C55E;
+            --ok-soft: rgba(34, 197, 94, 0.14);
+            --warn: #F59E0B;
+            --error: #EF4444;
+            --error-soft: rgba(239, 68, 68, 0.14);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 12px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -33,7 +31,11 @@
             background-color: var(--bg);
             color: var(--ink);
             line-height: 1.5;
-            padding: 20px 28px 68px 28px;
+            padding: 18px 24px 64px 24px;
+        }
+        :focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
         .header {
             display: flex;
@@ -42,34 +44,28 @@
             flex-wrap: wrap;
             gap: 12px;
             border-bottom: 1px solid var(--line);
-            padding-bottom: 16px;
-            margin-bottom: 18px;
+            padding-bottom: 14px;
+            margin-bottom: 16px;
         }
         .brand {
-            font-size: 21px;
+            font-size: 20px;
             font-weight: 700;
-            letter-spacing: -0.4px;
+            letter-spacing: -0.3px;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .brand span.accent { color: var(--accent); }
+        .brand .accent { color: #60A5FA; }
         .tag-studio {
-            background: var(--ink);
-            color: #FFF;
+            background: var(--raised);
+            color: var(--sub);
+            border: 1px solid var(--line);
             font-size: 11px;
             font-weight: 600;
-            text-transform: uppercase;
-            padding: 3px 8px;
+            padding: 2px 8px;
             border-radius: 6px;
-            letter-spacing: 0.4px;
         }
-        .chips-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
+        .chips-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .hw-chip {
             display: inline-flex;
             align-items: center;
@@ -79,18 +75,18 @@
             background: var(--card);
             color: var(--sub);
             border: 1px solid var(--line);
-            padding: 5px 11px;
+            padding: 4px 10px;
             border-radius: 999px;
             font-weight: 600;
         }
-        .hw-chip.ok { background: var(--ok-soft); color: var(--ok); border-color: #BBF7D0; }
-        .hw-chip.err { background: var(--error-soft); color: var(--error); border-color: #FECACA; }
+        .hw-chip.ok { background: var(--ok-soft); color: #86EFAC; border-color: rgba(34,197,94,0.35); }
+        .hw-chip.err { background: var(--error-soft); color: #FCA5A5; border-color: rgba(239,68,68,0.4); }
         .hw-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
         .tabs {
             display: flex;
             gap: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
@@ -105,12 +101,11 @@
             font-weight: 500;
             color: var(--sub);
             cursor: pointer;
-            transition: all 0.15s ease;
         }
-        .tab-btn.active {
-            background: var(--ink);
-            color: #FFF;
-            border-color: var(--ink);
+        .tab-btn[aria-selected="true"] {
+            background: var(--accent);
+            color: #FFFFFF;
+            border-color: var(--accent);
         }
         .shortcut-hint {
             font-size: 12px;
@@ -119,29 +114,32 @@
         }
         .studio-grid {
             display: grid;
-            grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
-            gap: 24px;
+            grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+            gap: 20px;
             align-items: start;
+        }
+        .right-sticky {
+            position: sticky;
+            top: 16px;
         }
         .panel {
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: var(--radius-lg);
-            padding: 20px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-            margin-bottom: 20px;
+            padding: 18px;
+            margin-bottom: 16px;
         }
         .panel-title {
-            font-size: 15px;
+            font-size: 14.5px;
             font-weight: 600;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
             flex-wrap: wrap;
         }
-        .field { margin-bottom: 14px; }
+        .field { margin-bottom: 12px; }
         .label {
             display: block;
             font-size: 12.5px;
@@ -151,54 +149,44 @@
         }
         .input-text, .select-box, .textarea {
             width: 100%;
-            padding: 9px 12px;
+            padding: 8px 11px;
             font-size: 13.5px;
             border: 1px solid var(--line);
             border-radius: var(--radius-sm);
-            background: #FAFAFA;
+            background: var(--bg);
             color: var(--ink);
-            outline: none;
-            transition: border-color 0.15s;
+            font-variant-numeric: tabular-nums;
         }
-        .input-text:focus, .select-box:focus, .textarea:focus {
-            border-color: var(--accent);
-            background: #FFF;
-        }
-        .row-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-        .row-3 {
-            display: grid;
-            grid-template-columns: 1.4fr 1fr auto;
-            gap: 8px;
-            align-items: end;
-        }
-        .chips {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-            flex-wrap: wrap;
-        }
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .row-dl { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 8px; align-items: end; }
+        .chips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
         .btn-sec, .chip {
-            background: #F1EFEA;
+            background: var(--raised);
             border: 1px solid var(--line);
             font-size: 12.5px;
             padding: 7px 12px;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
             color: var(--ink);
             font-weight: 500;
-            transition: background 0.15s;
         }
-        .btn-sec:hover, .chip:hover { background: #E7E4DD; }
-        .btn-sec:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-sec:hover:not(:disabled), .chip:hover:not(:disabled) { border-color: var(--sub); }
+        .btn-sec:disabled, .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-danger-sm {
+            background: var(--error-soft);
+            border: 1px solid rgba(239,68,68,0.4);
+            color: #FCA5A5;
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+        }
         .btn-cancel {
             background: var(--error-soft);
-            border: 1px solid #FECACA;
-            color: var(--error);
-            padding: 13px 18px;
+            border: 1px solid rgba(239,68,68,0.45);
+            color: #FCA5A5;
+            padding: 12px 16px;
             border-radius: var(--radius-md);
             font-size: 14px;
             font-weight: 600;
@@ -208,94 +196,80 @@
         .duration-pill {
             font-size: 12px;
             font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
             background: var(--accent-soft);
-            color: var(--accent);
+            color: #93C5FD;
             padding: 3px 9px;
             border-radius: 6px;
             font-weight: 600;
         }
-        .layout-options {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
+        .source-player-box {
+            margin-bottom: 12px;
+            background: #000;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            border: 1px solid var(--line);
         }
+        .source-player-box video { width: 100%; max-height: 250px; display: block; }
+        .layout-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .layout-card {
             border: 2px solid var(--line);
+            background: var(--raised);
+            color: var(--ink);
             border-radius: var(--radius-md);
             padding: 12px;
             cursor: pointer;
             text-align: center;
-            transition: all 0.15s;
+            font: inherit;
         }
-        .layout-card.selected {
+        .layout-card[aria-pressed="true"] {
             border-color: var(--accent);
             background: var(--accent-soft);
         }
-        .layout-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
-        .layout-card p { font-size: 12px; color: var(--sub); }
-        .actions-row {
-            display: flex;
-            gap: 10px;
-            align-items: stretch;
-        }
+        .layout-card strong { display: block; font-size: 14px; margin-bottom: 2px; }
+        .layout-card span { font-size: 12px; color: var(--sub); }
+        .actions-row { display: flex; gap: 10px; align-items: stretch; }
         .btn-render {
             flex: 1;
             background: var(--accent);
             color: #FFFFFF;
             border: none;
-            padding: 13px 16px;
+            padding: 12px 16px;
             border-radius: var(--radius-md);
             font-size: 14.5px;
             font-weight: 600;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.15s ease;
         }
-        .btn-render:hover { background: var(--accent-hover); }
-        .btn-render:disabled { background: var(--muted); cursor: not-allowed; }
+        .btn-render:hover:not(:disabled) { background: var(--accent-hover); }
+        .btn-render:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
         .suggestion-item {
             border: 1px solid var(--line);
-            border-radius: 10px;
+            border-radius: var(--radius-sm);
             padding: 10px 12px;
             margin-bottom: 8px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            background: #FCFBF9;
+            background: var(--raised);
         }
-        .suggestion-meta { font-size: 12px; color: var(--sub); }
+        .suggestion-meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
         .phone-mockup {
-            width: 260px;
-            height: 462px;
-            background: #0E1013;
-            border-radius: 26px;
-            border: 7px solid #282828;
+            width: 256px;
+            height: 455px;
+            background: #080A0D;
+            border-radius: 22px;
+            border: 6px solid #2D333D;
             margin: 0 auto 14px auto;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 10px 28px rgba(0,0,0,0.14);
             position: relative;
         }
-        .phone-mockup video { width: 100%; height: 100%; object-fit: cover; display: none; }
-        .no-video-placeholder {
-            color: #9AA3B0;
-            font-size: 13px;
-            text-align: center;
-            padding: 20px;
-        }
-        .export-bar {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .clip-list { max-height: 250px; overflow-y: auto; }
+        .phone-mockup video, .phone-mockup img { width: 100%; height: 100%; object-fit: cover; display: none; }
+        .no-video-placeholder { color: var(--muted); font-size: 13px; text-align: center; padding: 20px; }
+        .export-bar { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
         .clip-item {
             display: flex;
             justify-content: space-between;
@@ -305,347 +279,363 @@
             font-size: 13px;
             gap: 8px;
         }
-        .clip-item:hover { background: #F9F9F8; }
+        .clip-item-actions { display: flex; gap: 6px; align-items: center; flex: none; }
         .clip-btn-play {
-            background: var(--cta-bg);
+            background: var(--accent);
             color: #FFF;
             border: none;
-            padding: 5px 12px;
-            border-radius: 999px;
+            padding: 5px 11px;
+            border-radius: var(--radius-sm);
             font-size: 12px;
             cursor: pointer;
-            white-space: nowrap;
         }
-        .grid-3 {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 20px;
-        }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
         .metric-card {
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: var(--radius-md);
-            padding: 18px;
+            padding: 16px;
         }
-        .metric-card h3 {
-            font-size: 12.5px;
-            color: var(--sub);
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            margin-bottom: 6px;
-        }
-        .metric-card .val { font-size: 24px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+        .metric-card h3 { font-size: 12px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+        .metric-card .val { font-size: 22px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
         .metric-card .subtext { font-size: 12px; color: var(--muted); margin-top: 4px; }
         .terminal-box {
-            background: #191817;
-            color: #F6F5F3;
+            background: #0B0D10;
+            color: var(--sub);
+            border: 1px solid var(--line);
             font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
             font-size: 12.5px;
-            padding: 16px;
-            border-radius: 10px;
+            padding: 14px;
+            border-radius: var(--radius-sm);
             white-space: pre-wrap;
             line-height: 1.6;
         }
-        /* Barra de status fixa no rodapé */
+        .details-box {
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            background: var(--raised);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+        }
+        .details-box summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--sub); }
+        .stacked-box {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--raised);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--line);
+        }
+        .fc-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
         #fc-statusbar {
             position: fixed;
             left: 0;
             right: 0;
             bottom: 0;
             height: 40px;
-            background: #191817;
-            color: #ECEAE6;
+            background: #0B0D10;
+            color: var(--ink);
             display: flex;
             align-items: center;
             gap: 12px;
             padding: 0 24px;
             font-size: 12.5px;
-            border-top: 1px solid #2E2D2A;
+            border-top: 1px solid var(--line);
             z-index: 100;
         }
         #fc-statusbar .s-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
         #fc-statusbar.busy .s-dot { background: #60A5FA; }
-        #fc-statusbar.err .s-dot { background: #F87171; }
-        #fc-statusbar.warn .s-dot { background: #FBBF24; }
+        #fc-statusbar.err .s-dot { background: var(--error); }
+        #fc-statusbar.warn .s-dot { background: var(--warn); }
         #fc-statusbar .s-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        #fc-statusbar .s-progress { width: 140px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; display: none; }
+        #fc-statusbar .s-progress { width: 140px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; display: none; }
         #fc-statusbar .s-progress > i { display: block; height: 100%; background: #60A5FA; width: 0%; transition: width 0.2s; }
 
         @media (max-width: 1200px) {
-            body { padding: 16px 18px 64px 18px; }
-            .studio-grid { grid-template-columns: 1fr 320px; gap: 18px; }
+            body { padding: 14px 16px 64px 16px; }
+            .studio-grid { grid-template-columns: 1fr 310px; gap: 16px; }
         }
-        @media (max-width: 860px) {
-            .studio-grid, .grid-3, .row-2, .row-3 { grid-template-columns: 1fr; }
+        @media (max-width: 900px) {
+            .studio-grid, .grid-3, .row-2, .row-3, .row-dl { grid-template-columns: 1fr; }
+            .right-sticky { position: static; }
             .shortcut-hint { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition-duration: 0.01ms !important; }
         }
     </style>
 </head>
 <body>
-    <div class="header">
+    <header class="header">
         <div class="brand">
             Fast<span class="accent">Clipper</span>
             <span class="tag-studio">Studio Local</span>
         </div>
-        <div class="chips-bar" id="topbar-chips">
+        <div class="chips-bar">
             <span class="hw-chip" id="chip-ffmpeg"><span class="dot"></span>FFmpeg</span>
             <span class="hw-chip" id="chip-gpu"><span class="dot"></span>Hardware</span>
-            <span class="hw-chip ok"><span class="dot"></span>SQLite WAL</span>
+            <span class="hw-chip ok"><span class="dot"></span>Local</span>
         </div>
-    </div>
+    </header>
 
     <div class="tabs">
-        <div class="tab-group">
-            <button class="tab-btn active" onclick="switchTab('studio')">Estúdio de Clipping 9:16</button>
-            <button class="tab-btn" onclick="switchTab('results')">Exportação & Receita</button>
-            <button class="tab-btn" onclick="switchTab('control')">Control Plane & Métricas</button>
+        <div class="tab-group" role="tablist" aria-label="Áreas do Studio">
+            <button type="button" class="tab-btn" id="tabbtn-studio" role="tab" aria-selected="true" aria-controls="tab-studio" data-tab="studio">Estúdio de Clipping 9:16</button>
+            <button type="button" class="tab-btn" id="tabbtn-results" role="tab" aria-selected="false" aria-controls="tab-results" data-tab="results">Resultados e Exportação</button>
+            <button type="button" class="tab-btn" id="tabbtn-control" role="tab" aria-selected="false" aria-controls="tab-control" data-tab="control">Control Plane</button>
         </div>
-        <div class="shortcut-hint">Atalhos: [I] Início · [O] Fim · [Ctrl+Enter] Renderizar</div>
+        <div class="shortcut-hint">Atalhos: [I] Marcar Início · [O] Marcar Fim · [Ctrl+Enter] Renderizar</div>
     </div>
 
     <!-- TAB 1: ESTUDIO DE CLIPPING -->
-    <div id="tab-studio" class="studio-grid">
+    <main id="tab-studio" class="studio-grid" role="tabpanel" aria-labelledby="tabbtn-studio">
         <div>
-            <div class="panel">
+            <section class="panel">
                 <div class="panel-title">
-                    <span>1. Vídeo de Origem & Marcação de Corte</span>
-                    <span id="duration-badge" class="duration-pill">Duração: 15.0s</span>
+                    <span>1. Vídeo de origem e marcação</span>
+                    <span id="duration-badge" class="duration-pill">Duração: 0.0s</span>
                 </div>
 
                 <div class="field">
-                    <label class="label">Fontes Registradas no Projeto</label>
-                    <select id="sources-select" class="select-box" onchange="applySelectedSource()">
-                        <option value="">-- Escolha uma fonte importada ou informe o caminho abaixo --</option>
-                    </select>
+                    <label class="label" for="sources-select">Fontes registradas no projeto</label>
+                    <select id="sources-select" class="select-box"></select>
                 </div>
 
                 <div class="field">
-                    <label class="label">Caminho do Vídeo (em data/ ou tests/fixtures/)</label>
+                    <label class="label" for="video_path">Caminho do vídeo (em data/ ou tests/fixtures/)</label>
                     <input type="text" id="video_path" class="input-text"
                            value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
                            placeholder="Ex: data/projects/meu_canal/source/live.mp4">
                 </div>
 
-                <details style="margin-bottom:14px; padding:10px 12px; background:#FAF9F7; border:1px solid var(--line); border-radius:8px;">
-                    <summary style="cursor:pointer; font-size:12.5px; font-weight:600; color:var(--sub);">Baixar VOD autorizado via link (yt-dlp)</summary>
-                    <div class="row-3" style="margin-top:10px;">
+                <div class="source-player-box">
+                    <video id="source-player" controls playsinline preload="metadata"></video>
+                </div>
+
+                <div class="chips" style="margin-bottom: 12px;">
+                    <button type="button" class="chip" id="btn-mark-in">Marcar início no player (I)</button>
+                    <button type="button" class="chip" id="btn-mark-out">Marcar fim no player (O)</button>
+                    <button type="button" class="chip" data-dur="15">+15s</button>
+                    <button type="button" class="chip" data-dur="30">+30s</button>
+                    <button type="button" class="chip" data-dur="45">+45s</button>
+                </div>
+
+                <div class="row-2">
+                    <div class="field">
+                        <label class="label" for="inicio_s">Início do corte (s)</label>
+                        <input type="number" step="0.1" min="0" id="inicio_s" class="input-text" value="0.0">
+                    </div>
+                    <div class="field">
+                        <label class="label" for="fim_s">Fim do corte (s)</label>
+                        <input type="number" step="0.1" min="0.5" id="fim_s" class="input-text" value="5.0">
+                    </div>
+                </div>
+
+                <details class="details-box">
+                    <summary>Baixar vídeo autorizado de um link</summary>
+                    <div class="row-dl" style="margin-top:10px;">
                         <div>
-                            <label class="label">URL do Vídeo</label>
+                            <label class="label" for="dl_url">URL do vídeo</label>
                             <input type="text" id="dl_url" class="input-text" placeholder="https://www.youtube.com/watch?v=...">
                         </div>
                         <div>
-                            <label class="label">Referência de Autorização</label>
+                            <label class="label" for="dl_auth_ref">Autorização (obrigatória)</label>
                             <input type="text" id="dl_auth_ref" class="input-text" placeholder="Ex: CANAL-PROPRIO-01">
                         </div>
-                        <button type="button" id="btn-download-vod" class="btn-sec" onclick="downloadSourceUrl()">Baixar VOD</button>
+                        <button type="button" id="btn-download-vod" class="btn-sec">Baixar</button>
                     </div>
                 </details>
 
-                <div class="row-2">
-                    <div class="field">
-                        <label class="label">Início do Corte (segundos)</label>
-                        <input type="number" step="0.1" id="inicio_s" class="input-text" value="0.0" oninput="updateDuration()">
+                <div class="row-3">
+                    <div>
+                        <label class="label" for="sug-duration">Duração alvo (s)</label>
+                        <input type="number" id="sug-duration" class="input-text" value="25" min="5" max="90">
                     </div>
-                    <div class="field">
-                        <label class="label">Fim do Corte (segundos)</label>
-                        <input type="number" step="0.1" id="fim_s" class="input-text" value="15.0" oninput="updateDuration()">
+                    <div>
+                        <label class="label" for="sug-topk">Quantidade</label>
+                        <input type="number" id="sug-topk" class="input-text" value="5" min="1" max="15">
                     </div>
-                </div>
-
-                <div class="chips">
-                    <button type="button" class="chip" onclick="setClipDuration(15)">+15s</button>
-                    <button type="button" class="chip" onclick="setClipDuration(30)">+30s</button>
-                    <button type="button" class="chip" onclick="setClipDuration(45)">+45s</button>
-                    <button type="button" class="chip" onclick="setClipDuration(60)">+60s</button>
-                    <button type="button" class="chip" onclick="suggestMoments()">Sugerir Melhores Momentos</button>
+                    <div style="display:flex; align-items:end;">
+                        <button type="button" id="btn-suggest" class="chip" style="width:100%;">Sugerir Melhores Momentos</button>
+                    </div>
                 </div>
 
                 <div id="suggestions-wrap" style="display:none; margin-top:14px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
-                        <strong style="font-size:13px;">Sugestões Ranqueadas (alinhadas por frase)</strong>
-                        <button type="button" class="chip" onclick="renderBatchSelected()">Renderizar Selecionados em Lote</button>
+                    <div class="panel-title" style="margin-bottom:8px;">
+                        <span style="font-size:13px;">Sugestões ranqueadas (alinhadas por frase)</span>
+                        <button type="button" id="btn-batch-render" class="chip">Renderizar lote selecionado</button>
                     </div>
                     <div id="suggestions-list"></div>
                 </div>
-            </div>
+            </section>
 
-            <div class="panel">
+            <section class="panel">
                 <div class="panel-title">
-                    <span>2. Enquadramento Vertical (9:16)</span>
+                    <span>2. Enquadramento vertical (9:16)</span>
                 </div>
                 <div class="layout-options">
-                    <div id="card-solo" class="layout-card selected" onclick="selectLayout('solo')">
-                        <h4>Solo 9:16</h4>
-                        <p>Crop vertical centralizado</p>
-                    </div>
-                    <div id="card-stacked" class="layout-card" onclick="selectLayout('stacked')">
-                        <h4>Empilhado (Stacked)</h4>
-                        <p>Facecam no topo + Gameplay na base</p>
-                    </div>
+                    <button type="button" id="card-solo" class="layout-card" aria-pressed="true">
+                        <strong>Solo 9:16</strong>
+                        <span>Corte vertical centralizado</span>
+                    </button>
+                    <button type="button" id="card-stacked" class="layout-card" aria-pressed="false">
+                        <strong>Empilhado (Stacked)</strong>
+                        <span>Facecam no topo e gameplay na base</span>
+                    </button>
                 </div>
 
-                <div id="stacked-config" style="display: none; margin-top: 14px; padding: 14px; background: #FAF9F8; border-radius: 10px; border: 1px solid var(--line);">
+                <div id="stacked-config" class="stacked-box">
                     <div class="row-2">
                         <div class="field">
-                            <label class="label">Preset de Canal Salvo</label>
-                            <select id="channel-preset-select" class="select-box" onchange="applySelectedPreset()">
-                                <option value="">-- Selecionar preset salvo --</option>
-                            </select>
+                            <label class="label" for="channel-preset-select">Preset de canal salvo</label>
+                            <select id="channel-preset-select" class="select-box"></select>
                         </div>
                         <div class="field">
-                            <label class="label">Salvar Preset do Canal</label>
+                            <label class="label" for="preset-channel-name">Salvar preset atual</label>
                             <div style="display:flex; gap:6px;">
                                 <input type="text" id="preset-channel-name" class="input-text" placeholder="Ex: Canal Principal">
-                                <button type="button" class="chip" onclick="saveCurrentPreset()" style="white-space:nowrap;">Salvar</button>
+                                <button type="button" id="btn-save-preset" class="chip">Salvar</button>
                             </div>
                         </div>
                     </div>
 
-                    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-                        <button type="button" class="chip" onclick="loadSourcePreview()">Extrair Frame e Detectar Facecam</button>
-                        <button type="button" class="chip" onclick="previewLayout916()">Pré-visualizar 9:16</button>
+                    <div class="chips" style="margin-bottom:10px;">
+                        <button type="button" id="btn-extract-frame" class="chip">Extrair frame e detectar facecam</button>
+                        <button type="button" id="btn-preview-916" class="chip">Pré-visualizar 9:16</button>
                     </div>
 
                     <div id="facecam-canvas-wrap" style="display:none; margin-bottom:10px;">
-                        <p style="font-size:11.5px; color:var(--sub); margin-bottom:6px;">Arraste o mouse sobre a imagem para marcar a caixa da Facecam:</p>
-                        <canvas id="facecam-canvas" style="width:100%; border-radius:8px; border:1px solid var(--line); cursor:crosshair;"></canvas>
-                    </div>
-
-                    <div id="layout-preview-wrap" style="display:none; margin-bottom:10px; text-align:center;">
-                        <img id="layout-preview-img" alt="Prévia 9:16" style="max-height:240px; border-radius:8px; border:1px solid var(--line);">
+                        <p style="font-size:12px; color:var(--sub); margin-bottom:6px;">Arraste sobre o frame para ajustar a área da facecam:</p>
+                        <canvas id="facecam-canvas" style="width:100%; border-radius:8px; border:1px solid var(--line); cursor:crosshair; touch-action:none;"></canvas>
                     </div>
 
                     <div class="row-2">
                         <div class="field" style="margin-bottom:4px;">
-                            <label class="label">Facecam (x, y, w, h)</label>
-                            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">
-                                <input type="number" id="fc_x" class="input-text" value="50" title="X">
-                                <input type="number" id="fc_y" class="input-text" value="50" title="Y">
-                                <input type="number" id="fc_w" class="input-text" value="400" title="Largura">
-                                <input type="number" id="fc_h" class="input-text" value="300" title="Altura">
+                            <span class="label">Facecam (X, Y, Largura, Altura)</span>
+                            <div class="fc-grid-4">
+                                <input type="number" id="fc_x" aria-label="Facecam X" class="input-text" value="50">
+                                <input type="number" id="fc_y" aria-label="Facecam Y" class="input-text" value="50">
+                                <input type="number" id="fc_w" aria-label="Facecam Largura" class="input-text" value="400">
+                                <input type="number" id="fc_h" aria-label="Facecam Altura" class="input-text" value="300">
                             </div>
                         </div>
                         <div class="field" style="margin-bottom:4px;">
-                            <label class="label">Altura Facecam Topo (px)</label>
-                            <input type="number" id="h-facecam" class="input-text" value="720">
+                            <label class="label" for="h-facecam">Altura da facecam no topo (px)</label>
+                            <input type="number" id="h-facecam" class="input-text" value="720" min="360" max="1200" step="20">
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="panel">
+            <section class="panel">
                 <div class="panel-title">
-                    <span>3. Transcrição e Legendas Animadas</span>
-                    <button type="button" id="btn-transcribe" class="chip" onclick="transcribeVideo()">Transcrever Áudio (Whisper GPU)</button>
+                    <span>3. Transcrição e legendas</span>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <select id="transcribe-lang" aria-label="Idioma da transcrição" class="select-box" style="width:auto; padding:5px 10px;">
+                            <option value="pt">Português</option>
+                            <option value="en">Inglês</option>
+                            <option value="es">Espanhol</option>
+                        </select>
+                        <button type="button" id="btn-transcribe" class="chip">Transcrever áudio</button>
+                    </div>
                 </div>
 
                 <div class="row-2">
                     <div class="field">
-                        <label class="label">Estilo da Legenda</label>
+                        <label class="label" for="subtitle_preset">Estilo da legenda</label>
                         <select id="subtitle_preset" class="select-box">
-                            <option value="viral_bounce">Viral Bounce (Amarelo e Preto)</option>
-                            <option value="minimal_clean">Minimal Clean (Branco Limpo)</option>
-                            <option value="cinema_editorial">Cinema Editorial (Alto Contraste)</option>
+                            <option value="viral_bounce">Viral Bounce (amarelo e preto)</option>
+                            <option value="minimal_clean">Minimal Clean (branco limpo)</option>
+                            <option value="cinema_editorial">Cinema Editorial (alto contraste)</option>
                         </select>
                     </div>
-                    <div class="field" style="display:flex; align-items:center; margin-top: 22px;">
-                        <label style="font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="burn_subtitles" checked style="width: 17px; height: 17px;">
-                            Queimar legendas animadas no vídeo
+                    <div class="field" style="display:flex; align-items:center; margin-top:22px;">
+                        <label for="burn_subtitles" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="burn_subtitles" checked style="width:17px; height:17px;">
+                            Queimar legendas no vídeo
                         </label>
                     </div>
                 </div>
 
                 <div class="field">
-                    <label class="label">Texto da Legenda / Gancho do Clipe</label>
+                    <label class="label" for="subtitle_text">Texto da legenda / gancho</label>
                     <textarea id="subtitle_text" class="textarea" rows="2"
                               placeholder="Transcreva o áudio ou digite o texto...">ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL</textarea>
                 </div>
 
                 <div class="actions-row">
-                    <button type="button" id="btn-render-action" class="btn-render" onclick="renderClipNow()">
-                        Renderizar clipe 9:16
-                    </button>
-                    <button type="button" id="btn-cancel-action" class="btn-cancel" onclick="cancelActiveRender()" disabled>
-                        Cancelar
-                    </button>
+                    <button type="button" id="btn-render-action" class="btn-render">Renderizar clipe 9:16</button>
+                    <button type="button" id="btn-cancel-action" class="btn-cancel" disabled>Cancelar</button>
                 </div>
-            </div>
+            </section>
         </div>
 
-        <!-- Coluna Direita: Player e Biblioteca -->
-        <div>
-            <div class="panel" style="text-align: center;">
+        <aside class="right-sticky">
+            <section class="panel" style="text-align: center;">
                 <div class="panel-title">
-                    <span>Pré-Visualização 9:16</span>
-                    <a id="btn-download-clip" href="#" download style="display: none; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: none;">Baixar MP4</a>
+                    <span>Pré-visualização 9:16</span>
+                    <a id="btn-download-clip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar MP4</a>
                 </div>
 
                 <div class="phone-mockup">
-                    <video id="player-preview" controls playsinline>
-                        <source id="video-source" src="" type="video/mp4">
-                        Seu navegador não suporta reprodução de vídeo.
-                    </video>
+                    <video id="player-preview" controls playsinline></video>
+                    <img id="layout-preview-img" alt="Prévia do enquadramento 9:16">
                     <div id="video-placeholder" class="no-video-placeholder">
-                        O clipe renderizado aparecerá aqui pronto para assistir, exportar pacote e baixar.
+                        A prévia 9:16 ou o clipe renderizado aparece aqui.
                     </div>
                 </div>
 
                 <div id="export-quick-bar" class="export-bar" style="display:none;">
-                    <select id="export-platform" class="select-box" style="width:auto; min-width:140px;">
+                    <label for="export-platform" class="label" style="margin:0;">Destino:</label>
+                    <select id="export-platform" class="select-box" style="width:auto; min-width:130px;">
                         <option value="tiktok">TikTok</option>
                         <option value="shorts">YouTube Shorts</option>
                         <option value="reels">Instagram Reels</option>
                         <option value="youtube">YouTube</option>
                     </select>
-                    <button id="btn-export-quick" type="button" class="btn-sec" onclick="exportCurrentClipQuick()">
-                        Exportar Pacote (MP4 + SRT + Capa + Copy)
-                    </button>
+                    <button id="btn-export-quick" type="button" class="btn-sec">Exportar pacote</button>
                 </div>
-            </div>
+            </section>
 
-            <div class="panel">
+            <section class="panel">
                 <div class="panel-title">
-                    <span>Clipes Renderizados Recentemente</span>
-                    <button type="button" onclick="loadClipsList()" class="btn-sec" style="padding:4px 10px;">Atualizar</button>
+                    <span>Clipes prontos</span>
+                    <button type="button" id="btn-refresh-clips" class="btn-sec" style="padding:4px 10px;">Atualizar</button>
                 </div>
-                <div id="clips-container" class="clip-list">
-                    <div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Carregando clipes...</div>
-                </div>
-            </div>
-        </div>
-    </div>
+                <div id="clips-container"></div>
+            </section>
+        </aside>
+    </main>
 
-    <!-- TAB 2: EXPORTACAO & RECEITA -->
-    <div id="tab-results" style="display: none;">
+    <!-- TAB 2: RESULTADOS E EXPORTACAO -->
+    <section id="tab-results" style="display: none;" role="tabpanel" aria-labelledby="tabbtn-results">
         <div class="grid-3">
             <div class="metric-card">
-                <h3>Clipes Publicados</h3>
+                <h3>Clipes publicados</h3>
                 <div id="res-total-posts" class="val">0</div>
-                <div class="subtext">Registrados no SQLite</div>
+                <div class="subtext">Total registrado</div>
             </div>
             <div class="metric-card">
-                <h3>Views (7 dias)</h3>
+                <h3>Visualizações (7 dias)</h3>
                 <div id="res-total-views" class="val">0</div>
                 <div class="subtext">Soma entre plataformas</div>
             </div>
             <div class="metric-card">
-                <h3>Receita Acumulada</h3>
+                <h3>Receita acumulada</h3>
                 <div id="res-total-rev" class="val">R$ 0,00</div>
-                <div class="subtext">Acompanhamento do Gate B</div>
+                <div class="subtext">Acompanhamento de retorno</div>
             </div>
         </div>
 
         <div class="panel">
-            <div class="panel-title">Registrar Resultado de Clipe Publicado</div>
+            <div class="panel-title">Registrar resultado de clipe publicado</div>
             <div class="row-2">
                 <div class="field">
-                    <label class="label">Arquivo do Clipe</label>
+                    <label class="label" for="res_clip_filename">Arquivo do clipe</label>
                     <input type="text" id="res_clip_filename" class="input-text" placeholder="Ex: clip_abc123_9x16.mp4">
                 </div>
                 <div class="field">
-                    <label class="label">Plataforma</label>
+                    <label class="label" for="res_platform">Plataforma</label>
                     <select id="res_platform" class="select-box">
                         <option value="tiktok">TikTok</option>
                         <option value="shorts">YouTube Shorts</option>
@@ -656,78 +646,98 @@
             </div>
             <div class="row-2">
                 <div class="field">
-                    <label class="label">Views (7d)</label>
-                    <input type="number" id="res_views_7d" class="input-text" value="0">
+                    <label class="label" for="res_views_7d">Visualizações (7 dias)</label>
+                    <input type="number" id="res_views_7d" class="input-text" value="0" min="0">
                 </div>
                 <div class="field">
-                    <label class="label">Receita (R$)</label>
-                    <input type="number" step="0.01" id="res_revenue" class="input-text" value="0.00">
+                    <label class="label" for="res_revenue">Receita (R$)</label>
+                    <input type="number" step="0.01" id="res_revenue" class="input-text" value="0.00" min="0">
                 </div>
             </div>
-            <button type="button" class="btn-render" onclick="saveClipResult()">Salvar Resultado</button>
+            <button type="button" id="btn-save-result" class="btn-render">Salvar resultado</button>
         </div>
 
         <div class="panel">
-            <div class="panel-title">Histórico de Publicações</div>
-            <div id="results-list" class="clip-list"></div>
+            <div class="panel-title">Histórico de publicações</div>
+            <div id="results-list"></div>
         </div>
-    </div>
+    </section>
 
-    <!-- TAB 3: CONTROL PLANE & METRICAS -->
-    <div id="tab-control" style="display: none;">
+    <!-- TAB 3: CONTROL PLANE -->
+    <section id="tab-control" style="display: none;" role="tabpanel" aria-labelledby="tabbtn-control">
         <div class="grid-3">
             <div class="metric-card">
-                <h3>Hardware Encoder</h3>
+                <h3>Codificador de vídeo</h3>
                 <div id="ctrl-encoder" class="val">--</div>
-                <div class="subtext">Aceleração com fallback x264</div>
+                <div class="subtext">Aceleração ou fallback x264</div>
             </div>
             <div class="metric-card">
-                <h3>CUDA / Whisper</h3>
+                <h3>Transcrição local</h3>
                 <div id="ctrl-cuda" class="val">--</div>
-                <div class="subtext">Transcrição com cache SHA-256</div>
+                <div class="subtext">GPU CUDA ou CPU</div>
             </div>
             <div class="metric-card">
                 <h3>FFmpeg / FFprobe</h3>
                 <div id="ctrl-ffmpeg" class="val">--</div>
-                <div class="subtext">Validação estrita pós-render</div>
+                <div class="subtext">Corte e validação do arquivo</div>
             </div>
         </div>
 
         <div class="panel">
-            <div class="panel-title">Guia Operacional no Terminal</div>
-            <div class="terminal-box">
-# Iniciar o Estúdio Fast Clipper e abrir no navegador:
-python -m fastclipper studio
-
-# Executar worker contínuo de renderização:
+            <div class="panel-title">Comandos úteis no terminal</div>
+            <div class="terminal-box">python -m fastclipper studio
 python -m fastclipper queue worker --run-pipeline
-
-# Diagnóstico preliminar de vídeo fonte:
 python -m fastclipper precheck --video tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4
-
-# Documentação OpenAPI interativa (Swagger):
-http://127.0.0.1:8000/docs
-            </div>
+http://127.0.0.1:8000/docs</div>
         </div>
-    </div>
+    </section>
 
     <div id="fc-statusbar" role="status" aria-live="polite">
         <span class="s-dot"></span>
-        <span class="s-text" id="sb-text">Pronto. Escolha uma fonte ou clique em Renderizar clipe 9:16.</span>
+        <span class="s-text" id="sb-text">Pronto.</span>
         <span class="s-progress" id="sb-progress"><i id="sb-progress-bar"></i></span>
     </div>
 
     <script>
+        const FMT_NUM = new Intl.NumberFormat('pt-BR');
+        const FMT_BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
         let currentLayout = 'solo';
         let currentClipFilename = null;
+        let sourceDuration = null;
         let transcribedWords = null;
         let lastSuggestions = [];
         let previewImgObj = null;
         let srcWidth = 1920;
         let srcHeight = 1080;
+        let isDragging = false;
         let dragStart = null;
         let savedPresetsMap = {};
         let batchPollTimer = null;
+
+        function el(tag, attrs = {}, children = []) {
+            const node = document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs)) {
+                if (k === 'className') node.className = v;
+                else if (k === 'textContent') node.textContent = v;
+                else if (v !== null && v !== undefined) node.setAttribute(k, String(v));
+            }
+            for (const ch of children) {
+                if (typeof ch === 'string') node.appendChild(document.createTextNode(ch));
+                else if (ch) node.appendChild(ch);
+            }
+            return node;
+        }
+
+        async function api(url, options = {}) {
+            const res = await fetch(url, options);
+            let data = null;
+            try { data = await res.json(); } catch (e) {}
+            if (!res.ok) {
+                throw new Error((data && data.detail) || `Erro HTTP ${res.status}`);
+            }
+            return data;
+        }
 
         function setStatus(text, state = 'idle', progressPct = null) {
             const bar = document.getElementById('fc-statusbar');
@@ -735,7 +745,7 @@ http://127.0.0.1:8000/docs
             const progWrap = document.getElementById('sb-progress');
             const progFill = document.getElementById('sb-progress-bar');
             bar.className = state === 'idle' ? '' : state;
-            label.innerText = text;
+            label.textContent = text;
             if (progressPct !== null) {
                 progWrap.style.display = 'block';
                 progFill.style.width = `${Math.max(0, Math.min(100, progressPct))}%`;
@@ -744,44 +754,79 @@ http://127.0.0.1:8000/docs
             }
         }
 
-        function switchTab(tab) {
-            const btns = document.querySelectorAll('.tab-btn');
-            btns.forEach(b => b.classList.remove('active'));
-            document.getElementById('tab-studio').style.display = 'none';
-            document.getElementById('tab-results').style.display = 'none';
-            document.getElementById('tab-control').style.display = 'none';
-            if (tab === 'studio') {
-                btns[0].classList.add('active');
-                document.getElementById('tab-studio').style.display = 'grid';
-            } else if (tab === 'results') {
-                btns[1].classList.add('active');
-                document.getElementById('tab-results').style.display = 'block';
-                loadResults();
-            } else {
-                btns[2].classList.add('active');
-                document.getElementById('tab-control').style.display = 'block';
-                loadSystemStatus();
-            }
+        function saveFormState() {
+            try {
+                sessionStorage.setItem('fc_studio_state', JSON.stringify({
+                    video_path: document.getElementById('video_path').value,
+                    inicio_s: document.getElementById('inicio_s').value,
+                    fim_s: document.getElementById('fim_s').value,
+                    subtitle_text: document.getElementById('subtitle_text').value,
+                    layout: currentLayout,
+                }));
+            } catch (e) {}
         }
 
-        function updateDuration() {
-            const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
-            const fim = parseFloat(document.getElementById('fim_s').value) || 0;
-            const dur = Math.max(0, fim - ini).toFixed(1);
-            document.getElementById('duration-badge').innerText = `Duração: ${dur}s`;
+        function restoreFormState() {
+            try {
+                const raw = sessionStorage.getItem('fc_studio_state');
+                if (!raw) return;
+                const st = JSON.parse(raw);
+                if (st.video_path) document.getElementById('video_path').value = st.video_path;
+                if (st.inicio_s !== undefined) document.getElementById('inicio_s').value = st.inicio_s;
+                if (st.fim_s !== undefined) document.getElementById('fim_s').value = st.fim_s;
+                if (st.subtitle_text !== undefined) document.getElementById('subtitle_text').value = st.subtitle_text;
+                if (st.layout) selectLayout(st.layout);
+            } catch (e) {}
+        }
+
+        function switchTab(tab) {
+            const btns = document.querySelectorAll('.tab-btn');
+            btns.forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab ? 'true' : 'false'));
+            document.getElementById('tab-studio').style.display = tab === 'studio' ? 'grid' : 'none';
+            document.getElementById('tab-results').style.display = tab === 'results' ? 'block' : 'none';
+            document.getElementById('tab-control').style.display = tab === 'control' ? 'block' : 'none';
+            try { location.hash = tab; } catch (e) {}
+            if (tab === 'results') loadResults();
+            if (tab === 'control') loadSystemStatus();
+        }
+
+        function validateCutBounds() {
+            const iniEl = document.getElementById('inicio_s');
+            const fimEl = document.getElementById('fim_s');
+            const btnRender = document.getElementById('btn-render-action');
+            const ini = parseFloat(iniEl.value);
+            const fim = parseFloat(fimEl.value);
+
+            if (Number.isNaN(ini) || Number.isNaN(fim) || ini < 0 || fim <= ini) {
+                document.getElementById('duration-badge').textContent = 'Intervalo inválido';
+                btnRender.disabled = true;
+                return false;
+            }
+            if (sourceDuration !== null && fim > sourceDuration + 0.05) {
+                document.getElementById('duration-badge').textContent = `Máximo ${sourceDuration.toFixed(1)}s`;
+                btnRender.disabled = true;
+                return false;
+            }
+            document.getElementById('duration-badge').textContent = `Duração: ${(fim - ini).toFixed(1)}s`;
+            btnRender.disabled = false;
+            saveFormState();
+            return true;
         }
 
         function setClipDuration(seconds) {
             const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
-            document.getElementById('fim_s').value = (ini + seconds).toFixed(1);
-            updateDuration();
+            let fim = ini + seconds;
+            if (sourceDuration !== null && fim > sourceDuration) fim = sourceDuration;
+            document.getElementById('fim_s').value = fim.toFixed(1);
+            validateCutBounds();
         }
 
         function selectLayout(mode) {
             currentLayout = mode;
-            document.getElementById('card-solo').classList.toggle('selected', mode === 'solo');
-            document.getElementById('card-stacked').classList.toggle('selected', mode === 'stacked');
+            document.getElementById('card-solo').setAttribute('aria-pressed', mode === 'solo' ? 'true' : 'false');
+            document.getElementById('card-stacked').setAttribute('aria-pressed', mode === 'stacked' ? 'true' : 'false');
             document.getElementById('stacked-config').style.display = mode === 'stacked' ? 'block' : 'none';
+            saveFormState();
         }
 
         function getFacecamRect() {
@@ -801,92 +846,112 @@ http://127.0.0.1:8000/docs
             const r = getFacecamRect();
             const sx = canvas.width / srcWidth;
             const sy = canvas.height / srcHeight;
-            ctx.strokeStyle = '#2563EB';
+            ctx.strokeStyle = '#3B82F6';
             ctx.lineWidth = 3;
             ctx.strokeRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
-            ctx.fillStyle = 'rgba(37, 99, 235, 0.18)';
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.22)';
             ctx.fillRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
+        }
+
+        async function loadSourceVideo() {
+            const videoPath = document.getElementById('video_path').value.trim();
+            if (!videoPath) return;
+            const player = document.getElementById('source-player');
+            player.src = `/api/v1/studio/source-video?path=${encodeURIComponent(videoPath)}`;
+
+            try {
+                const probe = await api('/api/v1/precheck', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_path: videoPath, min_duration_s: 0.5, require_audio: false }),
+                });
+                if (probe.is_valid && probe.duration_s) {
+                    sourceDuration = probe.duration_s;
+                    const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
+                    const fim = parseFloat(document.getElementById('fim_s').value) || 0;
+                    if (fim > sourceDuration || fim <= ini) {
+                        document.getElementById('inicio_s').value = '0.0';
+                        document.getElementById('fim_s').value = Math.min(15.0, sourceDuration).toFixed(1);
+                    }
+                    validateCutBounds();
+                    setStatus(`Vídeo pronto (${sourceDuration.toFixed(1)}s).`, 'idle');
+                } else {
+                    sourceDuration = null;
+                    setStatus(probe.message || 'Vídeo inválido no pre-check.', 'warn');
+                }
+            } catch (err) {
+                sourceDuration = null;
+                setStatus(err.message, 'err');
+            }
+            saveFormState();
         }
 
         async function loadSystemStatus() {
             try {
-                const res = await fetch('/api/v1/status');
-                if (!res.ok) return;
-                const d = await res.json();
+                const d = await api('/api/v1/status');
                 const chipFfmpeg = document.getElementById('chip-ffmpeg');
                 const chipGpu = document.getElementById('chip-gpu');
+                chipFfmpeg.textContent = '';
+                chipFfmpeg.appendChild(el('span', { className: 'dot' }));
                 if (d.ffmpeg && d.ffmpeg.installed) {
                     chipFfmpeg.className = 'hw-chip ok';
-                    chipFfmpeg.innerHTML = '<span class="dot"></span>FFmpeg OK';
+                    chipFfmpeg.appendChild(document.createTextNode('FFmpeg OK'));
                 } else {
                     chipFfmpeg.className = 'hw-chip err';
-                    chipFfmpeg.innerHTML = '<span class="dot"></span>FFmpeg ausente';
+                    chipFfmpeg.appendChild(document.createTextNode('FFmpeg ausente'));
                 }
+                chipGpu.textContent = '';
+                chipGpu.appendChild(el('span', { className: 'dot' }));
                 if (d.cuda_available || d.nvenc_available) {
                     chipGpu.className = 'hw-chip ok';
-                    chipGpu.innerHTML = `<span class="dot"></span>${d.hardware_encoder} + CUDA`;
+                    chipGpu.appendChild(document.createTextNode(`${d.hardware_encoder} + CUDA`));
                 } else {
                     chipGpu.className = 'hw-chip';
-                    chipGpu.innerHTML = `<span class="dot"></span>${d.hardware_encoder || 'CPU'}`;
+                    chipGpu.appendChild(document.createTextNode(d.hardware_encoder || 'CPU'));
                 }
-                document.getElementById('ctrl-encoder').innerText = d.hardware_encoder || '--';
-                document.getElementById('ctrl-cuda').innerText = d.cuda_available ? 'ATIVO' : 'CPU';
-                document.getElementById('ctrl-ffmpeg').innerText = (d.ffmpeg && d.ffmpeg.installed) ? 'OK' : 'AUSENTE';
-            } catch (e) {}
+                document.getElementById('ctrl-encoder').textContent = d.hardware_encoder || '--';
+                document.getElementById('ctrl-cuda').textContent = d.cuda_available ? 'GPU CUDA' : 'CPU';
+                document.getElementById('ctrl-ffmpeg').textContent = (d.ffmpeg && d.ffmpeg.installed) ? 'Instalado' : 'Ausente';
+            } catch (err) {
+                setStatus(`Falha ao consultar status: ${err.message}`, 'err');
+            }
         }
 
         async function loadSourcesList() {
             try {
-                const res = await fetch('/api/v1/studio/sources');
-                if (!res.ok) return;
-                const items = await res.json();
+                const items = await api('/api/v1/studio/sources');
                 const sel = document.getElementById('sources-select');
-                sel.innerHTML = '<option value="">-- Escolha uma fonte importada ou informe o caminho abaixo --</option>';
+                sel.textContent = '';
+                sel.appendChild(el('option', { value: '', textContent: '-- Escolha uma fonte importada ou informe o caminho abaixo --' }));
                 for (const s of items) {
-                    const opt = document.createElement('option');
-                    opt.value = s.file_path;
-                    opt.textContent = `${s.title} (${s.duration_s ? s.duration_s.toFixed(1) + 's' : 'local'})`;
-                    sel.appendChild(opt);
+                    const dur = s.duration_s ? `${s.duration_s.toFixed(1)}s` : 'local';
+                    sel.appendChild(el('option', { value: s.file_path, textContent: `${s.title} (${dur})` }));
                 }
-            } catch (e) {}
-        }
-
-        function applySelectedSource() {
-            const val = document.getElementById('sources-select').value;
-            if (val) {
-                document.getElementById('video_path').value = val;
-                transcribedWords = null;
-                setStatus(`Fonte selecionada: ${val}`);
+            } catch (err) {
+                setStatus(`Erro ao carregar fontes: ${err.message}`, 'err');
             }
         }
 
         async function downloadSourceUrl() {
             const url = document.getElementById('dl_url').value.trim();
             const authRef = document.getElementById('dl_auth_ref').value.trim();
-            if (!url || !authRef) {
-                setStatus('Informe a URL e a referência de autorização para baixar.', 'warn');
-                return;
-            }
+            if (!url || !authRef) return setStatus('Informe a URL e a referência de autorização.', 'warn');
             const btn = document.getElementById('btn-download-vod');
             btn.disabled = true;
-            setStatus('Baixando VOD autorizado via yt-dlp...', 'busy', 25);
+            setStatus('Baixando vídeo autorizado...', 'busy', 25);
             try {
-                const res = await fetch('/api/v1/studio/sources/download', {
+                const data = await api('/api/v1/studio/sources/download', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, authorization_ref: authRef })
+                    body: JSON.stringify({ url, authorization_ref: authRef }),
                 });
-                const data = await res.json();
-                if (res.ok) {
-                    document.getElementById('video_path').value = data.file_path;
-                    transcribedWords = null;
-                    await loadSourcesList();
-                    setStatus(`Download concluído: ${data.title}`, 'idle');
-                } else {
-                    setStatus(`Erro no download: ${data.detail || 'falha'}`, 'err');
-                }
+                document.getElementById('video_path').value = data.file_path;
+                transcribedWords = null;
+                await loadSourcesList();
+                await loadSourceVideo();
+                setStatus(`Download concluído: ${data.title}`, 'idle');
             } catch (err) {
-                setStatus(`Erro de conexão: ${err.message}`, 'err');
+                setStatus(`Erro no download: ${err.message}`, 'err');
             } finally {
                 btn.disabled = false;
             }
@@ -896,117 +961,110 @@ http://127.0.0.1:8000/docs
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
             if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
-
-            setStatus('Extraindo frame e detectando Facecam...', 'busy');
-            const res = await fetch('/api/v1/studio/preview-frame', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ video_path: videoPath, timestamp_s: inicioS, detect_facecam: true })
-            });
-            const data = await res.json();
-            if (!res.ok) return setStatus(data.detail || 'Falha ao extrair frame.', 'err');
-
-            srcWidth = data.source_width;
-            srcHeight = data.source_height;
-            if (data.facecam_suggestion && data.facecam_suggestion.facecam_rect) {
-                const fc = data.facecam_suggestion.facecam_rect;
-                document.getElementById('fc_x').value = fc.x;
-                document.getElementById('fc_y').value = fc.y;
-                document.getElementById('fc_w').value = fc.w;
-                document.getElementById('fc_h').value = fc.h;
+            const btn = document.getElementById('btn-extract-frame');
+            btn.disabled = true;
+            setStatus('Extraindo frame e detectando facecam...', 'busy');
+            try {
+                const data = await api('/api/v1/studio/preview-frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_path: videoPath, timestamp_s: inicioS, detect_facecam: true }),
+                });
+                srcWidth = data.source_width;
+                srcHeight = data.source_height;
+                if (data.facecam_suggestion && data.facecam_suggestion.facecam_rect) {
+                    const fc = data.facecam_suggestion.facecam_rect;
+                    document.getElementById('fc_x').value = fc.x;
+                    document.getElementById('fc_y').value = fc.y;
+                    document.getElementById('fc_w').value = fc.w;
+                    document.getElementById('fc_h').value = fc.h;
+                }
+                const wrap = document.getElementById('facecam-canvas-wrap');
+                const canvas = document.getElementById('facecam-canvas');
+                wrap.style.display = 'block';
+                previewImgObj = new Image();
+                previewImgObj.onload = () => {
+                    canvas.width = 640;
+                    canvas.height = Math.round(640 * (srcHeight / srcWidth));
+                    drawFacecamCanvas();
+                    setStatus('Frame pronto. Arraste no quadro para ajustar a facecam.', 'idle');
+                };
+                previewImgObj.src = data.image_url;
+            } catch (err) {
+                setStatus(err.message, 'err');
+            } finally {
+                btn.disabled = false;
             }
-
-            const wrap = document.getElementById('facecam-canvas-wrap');
-            const canvas = document.getElementById('facecam-canvas');
-            wrap.style.display = 'block';
-            previewImgObj = new Image();
-            previewImgObj.onload = () => {
-                canvas.width = 640;
-                canvas.height = Math.round(640 * (srcHeight / srcWidth));
-                drawFacecamCanvas();
-                setStatus('Frame carregado. Arraste sobre a imagem para ajustar a Facecam.', 'idle');
-            };
-            previewImgObj.src = data.image_url;
         }
 
         async function previewLayout916() {
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
+            const btn = document.getElementById('btn-preview-916');
+            btn.disabled = true;
             setStatus('Gerando prévia 9:16...', 'busy');
-            const res = await fetch('/api/v1/studio/preview-layout', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    video_path: videoPath,
-                    timestamp_s: inicioS,
-                    layout: currentLayout,
-                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.image_url) {
-                document.getElementById('layout-preview-wrap').style.display = 'block';
-                document.getElementById('layout-preview-img').src = data.image_url;
-                setStatus('Prévia 9:16 atualizada.', 'idle');
-            } else {
-                setStatus(data.detail || 'Erro ao gerar prévia 9:16.', 'err');
+            try {
+                const data = await api('/api/v1/studio/preview-layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_path: videoPath,
+                        timestamp_s: inicioS,
+                        layout: currentLayout,
+                        facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
+                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                    }),
+                });
+                const img = document.getElementById('layout-preview-img');
+                document.getElementById('player-preview').style.display = 'none';
+                document.getElementById('video-placeholder').style.display = 'none';
+                img.src = data.image_url;
+                img.style.display = 'block';
+                setStatus('Prévia 9:16 exibida na moldura.', 'idle');
+            } catch (err) {
+                setStatus(err.message, 'err');
+            } finally {
+                btn.disabled = false;
             }
         }
 
         async function loadPresetsList() {
             try {
-                const res = await fetch('/api/v1/studio/presets');
-                const items = await res.json();
+                const items = await api('/api/v1/studio/presets');
                 const sel = document.getElementById('channel-preset-select');
                 savedPresetsMap = {};
-                sel.innerHTML = '<option value="">-- Selecionar preset salvo --</option>';
+                sel.textContent = '';
+                sel.appendChild(el('option', { value: '', textContent: '-- Selecionar preset salvo --' }));
                 for (const p of items) {
                     savedPresetsMap[p.channel_id] = p;
-                    const opt = document.createElement('option');
-                    opt.value = p.channel_id;
-                    opt.textContent = `${p.name} (${p.layout_mode})`;
-                    sel.appendChild(opt);
+                    sel.appendChild(el('option', { value: p.channel_id, textContent: `${p.name} (${p.layout_mode})` }));
                 }
-            } catch (e) {}
-        }
-
-        function applySelectedPreset() {
-            const id = document.getElementById('channel-preset-select').value;
-            const p = savedPresetsMap[id];
-            if (!p) return;
-            selectLayout(p.layout_mode === 'stacked' ? 'stacked' : 'solo');
-            if (p.facecam_rect) {
-                document.getElementById('fc_x').value = p.facecam_rect.x;
-                document.getElementById('fc_y').value = p.facecam_rect.y;
-                document.getElementById('fc_w').value = p.facecam_rect.w;
-                document.getElementById('fc_h').value = p.facecam_rect.h;
-                drawFacecamCanvas();
+            } catch (err) {
+                setStatus(`Erro ao carregar presets: ${err.message}`, 'err');
             }
-            if (p.stacked_facecam_height) {
-                document.getElementById('h-facecam').value = p.stacked_facecam_height;
-            }
-            setStatus(`Preset "${p.name}" aplicado.`, 'idle');
         }
 
         async function saveCurrentPreset() {
             const name = document.getElementById('preset-channel-name').value.trim();
-            if (!name) return setStatus('Informe um nome para o preset do canal.', 'warn');
+            if (!name) return setStatus('Informe um nome para o preset.', 'warn');
             const channelId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-            const res = await fetch('/api/v1/studio/presets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    channel_id: channelId,
-                    name: name,
-                    layout_mode: currentLayout,
-                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                    stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720
-                })
-            });
-            if (res.ok) {
+            try {
+                await api('/api/v1/studio/presets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        channel_id: channelId,
+                        name,
+                        layout_mode: currentLayout,
+                        facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
+                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                    }),
+                });
                 await loadPresetsList();
                 document.getElementById('channel-preset-select').value = channelId;
-                setStatus(`Preset "${name}" salvo no SQLite.`, 'idle');
+                setStatus(`Preset "${name}" salvo.`, 'idle');
+            } catch (err) {
+                setStatus(`Erro ao salvar preset: ${err.message}`, 'err');
             }
         }
 
@@ -1015,23 +1073,22 @@ http://127.0.0.1:8000/docs
             if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
             const btn = document.getElementById('btn-transcribe');
             btn.disabled = true;
-            setStatus('Transcrevendo áudio com faster-whisper (CUDA)...', 'busy', 35);
+            setStatus('Transcrevendo áudio...', 'busy', 35);
             try {
-                const res = await fetch('/api/v1/studio/transcribe', {
+                const data = await api('/api/v1/studio/transcribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ video_path: videoPath, language: 'pt' })
+                    body: JSON.stringify({
+                        video_path: videoPath,
+                        language: document.getElementById('transcribe-lang').value,
+                    }),
                 });
-                const data = await res.json();
-                if (res.ok) {
-                    transcribedWords = data.words || [];
-                    if (data.full_text) {
-                        document.getElementById('subtitle_text').value = data.full_text;
-                    }
-                    setStatus(`${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache SQLite' : 'GPU'}).`, 'idle');
-                } else {
-                    setStatus(data.detail || 'Falha na transcrição.', 'err');
+                transcribedWords = data.words || [];
+                if (data.full_text) {
+                    document.getElementById('subtitle_text').value = data.full_text;
                 }
+                saveFormState();
+                setStatus(`${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache' : 'transcrição nova'}).`, 'idle');
             } catch (err) {
                 setStatus(`Erro na transcrição: ${err.message}`, 'err');
             } finally {
@@ -1042,46 +1099,62 @@ http://127.0.0.1:8000/docs
         async function suggestMoments() {
             const videoPath = document.getElementById('video_path').value.trim();
             if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
-            setStatus('Analisando áudio e palavras-chave para sugerir cortes...', 'busy');
-            const res = await fetch('/api/v1/studio/suggest-moments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    video_path: videoPath,
-                    words: transcribedWords,
-                    target_duration_s: 25.0,
-                    top_k: 5
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) return setStatus(data.detail || 'Erro ao sugerir momentos.', 'err');
-            lastSuggestions = data.suggestions || [];
-            const wrap = document.getElementById('suggestions-wrap');
-            const list = document.getElementById('suggestions-list');
-            wrap.style.display = 'block';
-            list.innerHTML = lastSuggestions.map((s, idx) => `
-                <div class="suggestion-item">
-                    <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; flex:1;">
-                        <input type="checkbox" class="sug-check" data-idx="${idx}" checked style="margin-top:3px;">
-                        <div>
-                            <strong>#${idx + 1} · ${s.inicio_s}s → ${s.fim_s}s (${s.duration_s}s)</strong>
-                            <span class="duration-pill" style="margin-left:6px;">Score ${Math.round(s.score * 100)}%</span>
-                            <div class="suggestion-meta">${s.reason}${s.preview_text ? ' · "' + s.preview_text + '"' : ''}</div>
-                        </div>
-                    </label>
-                    <button type="button" class="chip" onclick="applySuggestion(${idx})">Usar</button>
-                </div>
-            `).join('');
-            setStatus(`${lastSuggestions.length} sugestões alinhadas por frase.`, 'idle');
-        }
+            const btn = document.getElementById('btn-suggest');
+            btn.disabled = true;
+            setStatus('Analisando áudio e transcrição...', 'busy');
+            try {
+                const data = await api('/api/v1/studio/suggest-moments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_path: videoPath,
+                        words: transcribedWords,
+                        target_duration_s: parseFloat(document.getElementById('sug-duration').value) || 25.0,
+                        top_k: parseInt(document.getElementById('sug-topk').value, 10) || 5,
+                    }),
+                });
+                lastSuggestions = data.suggestions || [];
+                const wrap = document.getElementById('suggestions-wrap');
+                const list = document.getElementById('suggestions-list');
+                wrap.style.display = 'block';
+                list.textContent = '';
 
-        function applySuggestion(idx) {
-            const s = lastSuggestions[idx];
-            if (!s) return;
-            document.getElementById('inicio_s').value = s.inicio_s;
-            document.getElementById('fim_s').value = s.fim_s;
-            updateDuration();
-            setStatus(`Corte selecionado: ${s.inicio_s}s a ${s.fim_s}s.`, 'idle');
+                lastSuggestions.forEach((s, idx) => {
+                    const cb = el('input', { type: 'checkbox', className: 'sug-check', checked: 'checked' });
+                    cb.dataset.idx = String(idx);
+                    cb.style.marginTop = '3px';
+
+                    const title = el('strong', { textContent: `#${idx + 1} · ${s.inicio_s}s → ${s.fim_s}s (${s.duration_s}s)` });
+                    const pill = el('span', { className: 'duration-pill', textContent: `Score ${Math.round(s.score * 100)}%` });
+                    pill.style.marginLeft = '6px';
+                    const metaText = s.reason + (s.preview_text ? ` · "${s.preview_text}"` : '');
+                    const meta = el('div', { className: 'suggestion-meta', textContent: metaText });
+
+                    const left = el('label', {}, [cb, el('div', {}, [title, pill, meta])]);
+                    left.style.display = 'flex';
+                    left.style.alignItems = 'flex-start';
+                    left.style.gap = '8px';
+                    left.style.cursor = 'pointer';
+                    left.style.flex = '1';
+
+                    const useBtn = el('button', { type: 'button', className: 'chip', textContent: 'Usar' });
+                    useBtn.addEventListener('click', () => {
+                        document.getElementById('inicio_s').value = s.inicio_s;
+                        document.getElementById('fim_s').value = s.fim_s;
+                        validateCutBounds();
+                        const sp = document.getElementById('source-player');
+                        if (sp && sp.src) sp.currentTime = s.inicio_s;
+                        setStatus(`Corte selecionado: ${s.inicio_s}s a ${s.fim_s}s.`, 'idle');
+                    });
+
+                    list.appendChild(el('div', { className: 'suggestion-item' }, [left, useBtn]));
+                });
+                setStatus(`${lastSuggestions.length} sugestões encontradas.`, 'idle');
+            } catch (err) {
+                setStatus(err.message, 'err');
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         async function renderBatchSelected() {
@@ -1095,26 +1168,26 @@ http://127.0.0.1:8000/docs
 
             document.getElementById('btn-cancel-action').disabled = false;
             setStatus(`Enfileirando ${items.length} cortes em lote...`, 'busy', 5);
-            const res = await fetch('/api/v1/studio/render-batch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    video_path: videoPath,
-                    items: items,
-                    layout: currentLayout,
-                    facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                    words: transcribedWords,
-                    subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
-                    subtitle_preset: document.getElementById('subtitle_preset').value,
-                    burn_subtitles: document.getElementById('burn_subtitles').checked
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.job_ids) {
-                pollBatchJobs(data.job_ids);
-            } else {
+            try {
+                const data = await api('/api/v1/studio/render-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_path: videoPath,
+                        items,
+                        layout: currentLayout,
+                        facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
+                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        words: transcribedWords,
+                        subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
+                        subtitle_preset: document.getElementById('subtitle_preset').value,
+                        burn_subtitles: document.getElementById('burn_subtitles').checked,
+                    }),
+                });
+                if (data.job_ids) pollBatchJobs(data.job_ids);
+            } catch (err) {
                 document.getElementById('btn-cancel-action').disabled = true;
-                setStatus(data.detail || 'Erro ao iniciar lote.', 'err');
+                setStatus(`Erro ao iniciar lote: ${err.message}`, 'err');
             }
         }
 
@@ -1123,99 +1196,86 @@ http://127.0.0.1:8000/docs
             const idsParam = jobIds.join(',');
             batchPollTimer = setInterval(async () => {
                 try {
-                    const res = await fetch(`/api/v1/studio/batch-status?ids=${encodeURIComponent(idsParam)}`);
-                    if (!res.ok) return;
-                    const st = await res.json();
+                    const st = await api(`/api/v1/studio/batch-status?ids=${encodeURIComponent(idsParam)}`);
                     const pct = st.total > 0 ? Math.round(((st.done + st.failed) / st.total) * 100) : 0;
                     if (st.active > 0 && !st.cancelled) {
-                        setStatus(`Lote em andamento: ${st.done}/${st.total} concluídos...`, 'busy', Math.max(8, pct));
+                        setStatus(`Lote: ${st.done}/${st.total} concluídos...`, 'busy', Math.max(8, pct));
                     } else {
                         clearInterval(batchPollTimer);
                         batchPollTimer = null;
                         document.getElementById('btn-cancel-action').disabled = true;
                         await loadClipsList();
                         if (st.cancelled) {
-                            setStatus(`Lote cancelado. ${st.done} clipe(s) concluído(s) foram mantidos.`, 'warn');
+                            setStatus(`Lote cancelado. ${st.done} clipe(s) mantido(s).`, 'warn');
                         } else {
-                            setStatus(`Lote finalizado: ${st.done} concluído(s), ${st.failed} falha(s).`, st.failed > 0 ? 'warn' : 'idle');
+                            setStatus(`Lote concluído: ${st.done} pronto(s), ${st.failed} falha(s).`, st.failed > 0 ? 'warn' : 'idle');
                         }
                     }
-                } catch (e) {}
-            }, 800);
+                } catch (err) {
+                    clearInterval(batchPollTimer);
+                    batchPollTimer = null;
+                    setStatus(`Erro ao acompanhar lote: ${err.message}`, 'err');
+                }
+            }, 1200);
         }
 
         async function cancelActiveRender() {
-            const btnCancel = document.getElementById('btn-cancel-action');
-            btnCancel.disabled = true;
-            setStatus('Cancelando processo FFmpeg ativo...', 'warn');
+            document.getElementById('btn-cancel-action').disabled = true;
+            setStatus('Cancelando renderização ativa...', 'warn');
             try {
-                await fetch('/api/v1/studio/cancel', { method: 'POST' });
-            } catch (e) {}
+                await api('/api/v1/studio/cancel', { method: 'POST' });
+            } catch (err) {
+                setStatus(`Erro ao cancelar: ${err.message}`, 'err');
+            }
         }
 
         async function renderClipNow() {
+            if (!validateCutBounds()) return setStatus('Ajuste início e fim dentro da duração do vídeo.', 'warn');
             const btn = document.getElementById('btn-render-action');
             const btnCancel = document.getElementById('btn-cancel-action');
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
-            const fimS = parseFloat(document.getElementById('fim_s').value) || 10;
-            const subPreset = document.getElementById('subtitle_preset').value;
-            const subText = document.getElementById('subtitle_text').value.trim();
-            const burnSubs = document.getElementById('burn_subtitles').checked;
-
-            if (!videoPath) {
-                setStatus('Informe o caminho do vídeo de origem.', 'warn');
-                return;
-            }
+            const fimS = parseFloat(document.getElementById('fim_s').value) || 5;
 
             btn.disabled = true;
             btnCancel.disabled = false;
-            btn.innerText = 'Renderizando 9:16...';
-            setStatus('Cortando, aplicando layout 9:16 e validando via FFprobe...', 'busy', 40);
+            btn.textContent = 'Renderizando 9:16...';
+            setStatus('Renderizando clipe 9:16 e validando saída...', 'busy', 40);
 
-            const facecamRect = currentLayout === 'stacked' ? getFacecamRect() : null;
             const useRealWords = Array.isArray(transcribedWords) && transcribedWords.length > 0;
-
-            const payload = {
-                video_path: videoPath,
-                inicio_s: inicioS,
-                fim_s: fimS,
-                layout: currentLayout,
-                facecam_rect: facecamRect,
-                subtitle_text: useRealWords ? null : subText,
-                words: useRealWords ? transcribedWords : null,
-                subtitles_are_absolute: useRealWords,
-                subtitle_preset: subPreset,
-                burn_subtitles: burnSubs
-            };
-
             try {
-                const res = await fetch('/api/v1/studio/render-now', {
+                const data = await api('/api/v1/studio/render-now', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        video_path: videoPath,
+                        inicio_s: inicioS,
+                        fim_s: fimS,
+                        layout: currentLayout,
+                        facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
+                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        subtitle_text: useRealWords ? null : document.getElementById('subtitle_text').value.trim(),
+                        words: useRealWords ? transcribedWords : null,
+                        subtitles_are_absolute: useRealWords,
+                        subtitle_preset: document.getElementById('subtitle_preset').value,
+                        burn_subtitles: document.getElementById('burn_subtitles').checked,
+                    }),
                 });
-                const data = await res.json();
-
-                if (res.ok && data.success) {
-                    setStatus(`Clipe renderizado (${data.duration.toFixed(1)}s): ${data.filename}`, 'idle');
-                    playClipInMockup(data.download_url, data.filename);
-                    loadClipsList();
-                } else {
-                    setStatus(`Erro: ${data.detail || 'Falha na renderização'}`, 'err');
-                }
+                setStatus(`Clipe pronto (${data.duration.toFixed(1)}s): ${data.filename}`, 'idle');
+                playClipInMockup(data.download_url, data.filename);
+                loadClipsList();
             } catch (err) {
-                setStatus(`Erro de conexão: ${err.message}`, 'err');
+                setStatus(err.message, 'err');
             } finally {
                 btn.disabled = false;
                 btnCancel.disabled = true;
-                btn.innerText = 'Renderizar clipe 9:16';
+                btn.textContent = 'Renderizar clipe 9:16';
             }
         }
 
         function playClipInMockup(url, filename) {
             const player = document.getElementById('player-preview');
-            const source = document.getElementById('video-source');
+            const img = document.getElementById('layout-preview-img');
             const placeholder = document.getElementById('video-placeholder');
             const dlBtn = document.getElementById('btn-download-clip');
             const expBar = document.getElementById('export-quick-bar');
@@ -1226,9 +1286,10 @@ http://127.0.0.1:8000/docs
                 expBar.style.display = 'flex';
             }
 
+            img.style.display = 'none';
             placeholder.style.display = 'none';
             player.style.display = 'block';
-            source.src = url;
+            player.src = url;
             player.load();
             player.play().catch(() => {});
 
@@ -1241,139 +1302,252 @@ http://127.0.0.1:8000/docs
             if (!currentClipFilename) return;
             const platform = document.getElementById('export-platform').value;
             const txt = document.getElementById('subtitle_text').value.trim();
-            setStatus(`Gerando pacote para ${platform.toUpperCase()}...`, 'busy', 50);
-
-            const resCopy = await fetch('/api/v1/studio/generate-copy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transcript_text: txt || 'Corte da live', platform })
-            });
-            const copy = await resCopy.json();
-            const resExp = await fetch('/api/v1/studio/export-package', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    clip_filename: currentClipFilename,
-                    platform,
-                    title: copy.title,
-                    description: copy.description,
-                    hashtags: copy.hashtags,
-                    words: transcribedWords
-                })
-            });
-            const data = await resExp.json();
-            if (resExp.ok) {
-                setStatus(`Pacote salvo em: ${data.package_dir}`, 'idle');
-            } else {
-                setStatus(data.detail || 'Erro ao exportar pacote.', 'err');
+            setStatus(`Exportando pacote para ${platform.toUpperCase()}...`, 'busy', 50);
+            try {
+                const copy = await api('/api/v1/studio/generate-copy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transcript_text: txt || 'Corte da live', platform }),
+                });
+                const data = await api('/api/v1/studio/export-package', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clip_filename: currentClipFilename,
+                        platform,
+                        title: copy.title,
+                        description: copy.description,
+                        hashtags: copy.hashtags,
+                        words: transcribedWords,
+                    }),
+                });
+                setStatus(`Pacote exportado em: ${data.package_dir}`, 'idle');
+            } catch (err) {
+                setStatus(`Erro na exportação: ${err.message}`, 'err');
             }
         }
 
         async function saveClipResult() {
             const clipFilename = document.getElementById('res_clip_filename').value.trim();
             if (!clipFilename) return setStatus('Informe o nome do arquivo do clipe.', 'warn');
-            const res = await fetch('/api/v1/studio/results', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    clip_filename: clipFilename,
-                    platform: document.getElementById('res_platform').value,
-                    views_7d: parseInt(document.getElementById('res_views_7d').value, 10) || 0,
-                    revenue_brl: parseFloat(document.getElementById('res_revenue').value) || 0.0,
-                    layout_mode: currentLayout
-                })
-            });
-            if (res.ok) {
+            try {
+                await api('/api/v1/studio/results', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clip_filename: clipFilename,
+                        platform: document.getElementById('res_platform').value,
+                        views_7d: parseInt(document.getElementById('res_views_7d').value, 10) || 0,
+                        revenue_brl: parseFloat(document.getElementById('res_revenue').value) || 0.0,
+                        layout_mode: currentLayout,
+                    }),
+                });
                 await loadResults();
-                setStatus('Resultado registrado no SQLite.', 'idle');
+                setStatus('Resultado salvo.', 'idle');
+            } catch (err) {
+                setStatus(`Erro ao salvar resultado: ${err.message}`, 'err');
             }
         }
 
         async function loadResults() {
-            const res = await fetch('/api/v1/studio/results');
-            if (!res.ok) return;
-            const data = await res.json();
-            const tot = data.summary.totals;
-            document.getElementById('res-total-posts').innerText = tot.total_posts;
-            document.getElementById('res-total-views').innerText = tot.total_views_7d;
-            document.getElementById('res-total-rev').innerText = `R$ ${Number(tot.total_revenue_brl).toFixed(2)}`;
-            const list = document.getElementById('results-list');
-            list.innerHTML = (data.results || []).map(r => `
-                <div class="clip-item">
-                    <div>
-                        <strong>${r.clip_filename}</strong> · ${r.platform.toUpperCase()}<br>
-                        <span style="font-size:11.5px; color:var(--muted);">${r.views_7d} views · R$ ${Number(r.revenue_brl).toFixed(2)}</span>
-                    </div>
-                </div>
-            `).join('') || '<div style="font-size:13px; color:var(--muted); padding:12px;">Nenhum resultado registrado ainda.</div>';
+            try {
+                const data = await api('/api/v1/studio/results');
+                const tot = data.summary.totals;
+                document.getElementById('res-total-posts').textContent = FMT_NUM.format(tot.total_posts || 0);
+                document.getElementById('res-total-views').textContent = FMT_NUM.format(tot.total_views_7d || 0);
+                document.getElementById('res-total-rev').textContent = FMT_BRL.format(Number(tot.total_revenue_brl || 0));
+
+                const list = document.getElementById('results-list');
+                list.textContent = '';
+                const results = data.results || [];
+                if (results.length === 0) {
+                    list.appendChild(el('div', { className: 'no-video-placeholder', textContent: 'Nenhum resultado registrado ainda.' }));
+                    return;
+                }
+                for (const r of results) {
+                    const title = el('strong', { textContent: `${r.clip_filename} · ${String(r.platform || '').toUpperCase()}` });
+                    const meta = el('div', {
+                        className: 'suggestion-meta',
+                        textContent: `${FMT_NUM.format(r.views_7d || 0)} views · ${FMT_BRL.format(Number(r.revenue_brl || 0))}`,
+                    });
+                    list.appendChild(el('div', { className: 'clip-item' }, [el('div', {}, [title, meta])]));
+                }
+            } catch (err) {
+                setStatus(`Erro ao carregar resultados: ${err.message}`, 'err');
+            }
         }
 
         async function loadClipsList() {
             const container = document.getElementById('clips-container');
             try {
-                const res = await fetch('/api/v1/studio/clips');
-                const clips = await res.json();
+                const clips = await api('/api/v1/studio/clips');
+                container.textContent = '';
                 if (!clips || clips.length === 0) {
-                    container.innerHTML = '<div style="font-size: 13px; color: var(--muted); padding: 12px; text-align: center;">Nenhum clipe renderizado ainda.</div>';
+                    container.appendChild(el('div', { className: 'no-video-placeholder', textContent: 'Nenhum clipe renderizado ainda.' }));
                     return;
                 }
+                for (const c of clips) {
+                    const dt = new Date((c.modified_at || 0) * 1000).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                    const info = el('div', {}, [
+                        el('strong', { textContent: c.filename }),
+                        el('div', { className: 'suggestion-meta', textContent: `${c.size_mb} MB · ${dt}` }),
+                    ]);
+                    const btnPlay = el('button', { type: 'button', className: 'clip-btn-play', textContent: 'Assistir' });
+                    btnPlay.addEventListener('click', () => playClipInMockup(c.download_url, c.filename));
 
-                container.innerHTML = clips.map(c => `
-                    <div class="clip-item">
-                        <div>
-                            <strong>${c.filename}</strong><br>
-                            <span style="font-size: 11.5px; color: var(--muted);">${c.size_mb} MB</span>
-                        </div>
-                        <button type="button" class="clip-btn-play" onclick="playClipInMockup('${c.download_url}', '${c.filename}')">Assistir</button>
-                    </div>
-                `).join('');
-            } catch (e) {
-                container.innerHTML = '<div style="font-size: 13px; color: var(--error); padding: 12px; text-align: center;">Erro ao carregar lista de clipes.</div>';
+                    const btnDel = el('button', { type: 'button', className: 'btn-danger-sm', textContent: 'Excluir' });
+                    btnDel.addEventListener('click', async () => {
+                        try {
+                            await api(`/api/v1/studio/clips/${encodeURIComponent(c.filename)}`, { method: 'DELETE' });
+                            setStatus(`Clipe excluído: ${c.filename}`, 'idle');
+                            loadClipsList();
+                        } catch (err) {
+                            setStatus(`Erro ao excluir: ${err.message}`, 'err');
+                        }
+                    });
+
+                    container.appendChild(el('div', { className: 'clip-item' }, [
+                        info,
+                        el('div', { className: 'clip-item-actions' }, [btnPlay, btnDel]),
+                    ]));
+                }
+            } catch (err) {
+                container.textContent = '';
+                container.appendChild(el('div', { className: 'no-video-placeholder', textContent: `Erro ao listar clipes: ${err.message}` }));
             }
         }
 
-        document.addEventListener('keydown', (e) => {
-            const tag = (document.activeElement?.tagName || '').toLowerCase();
-            if (e.ctrlKey && e.key === 'Enter') {
-                e.preventDefault();
-                renderClipNow();
-                return;
-            }
-            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-            if (e.key.toLowerCase() === 'i') document.getElementById('inicio_s').focus();
-            if (e.key.toLowerCase() === 'o') document.getElementById('fim_s').focus();
-        });
+        function bindEvents() {
+            const tabBtns = [...document.querySelectorAll('.tab-btn')];
+            tabBtns.forEach((btn, idx) => {
+                btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+                btn.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowRight') tabBtns[(idx + 1) % tabBtns.length].focus();
+                    if (e.key === 'ArrowLeft') tabBtns[(idx - 1 + tabBtns.length) % tabBtns.length].focus();
+                });
+            });
+
+            document.getElementById('sources-select').addEventListener('change', (e) => {
+                if (e.target.value) {
+                    document.getElementById('video_path').value = e.target.value;
+                    transcribedWords = null;
+                    loadSourceVideo();
+                }
+            });
+            document.getElementById('video_path').addEventListener('change', () => {
+                transcribedWords = null;
+                loadSourceVideo();
+            });
+            document.getElementById('inicio_s').addEventListener('input', validateCutBounds);
+            document.getElementById('fim_s').addEventListener('input', validateCutBounds);
+            document.getElementById('subtitle_text').addEventListener('input', saveFormState);
+
+            document.getElementById('btn-mark-in').addEventListener('click', () => {
+                const sp = document.getElementById('source-player');
+                document.getElementById('inicio_s').value = (sp.currentTime || 0).toFixed(1);
+                validateCutBounds();
+            });
+            document.getElementById('btn-mark-out').addEventListener('click', () => {
+                const sp = document.getElementById('source-player');
+                document.getElementById('fim_s').value = (sp.currentTime || 0).toFixed(1);
+                validateCutBounds();
+            });
+            document.querySelectorAll('.chip[data-dur]').forEach(btn => {
+                btn.addEventListener('click', () => setClipDuration(parseFloat(btn.dataset.dur)));
+            });
+
+            document.getElementById('btn-download-vod').addEventListener('click', downloadSourceUrl);
+            document.getElementById('btn-suggest').addEventListener('click', suggestMoments);
+            document.getElementById('btn-batch-render').addEventListener('click', renderBatchSelected);
+            document.getElementById('card-solo').addEventListener('click', () => selectLayout('solo'));
+            document.getElementById('card-stacked').addEventListener('click', () => selectLayout('stacked'));
+            document.getElementById('btn-save-preset').addEventListener('click', saveCurrentPreset);
+            document.getElementById('channel-preset-select').addEventListener('change', (e) => {
+                const p = savedPresetsMap[e.target.value];
+                if (!p) return;
+                selectLayout(p.layout_mode === 'stacked' ? 'stacked' : 'solo');
+                if (p.facecam_rect) {
+                    document.getElementById('fc_x').value = p.facecam_rect.x;
+                    document.getElementById('fc_y').value = p.facecam_rect.y;
+                    document.getElementById('fc_w').value = p.facecam_rect.w;
+                    document.getElementById('fc_h').value = p.facecam_rect.h;
+                    drawFacecamCanvas();
+                }
+                if (p.stacked_facecam_height) document.getElementById('h-facecam').value = p.stacked_facecam_height;
+                setStatus(`Preset "${p.name}" aplicado.`, 'idle');
+            });
+
+            ['fc_x', 'fc_y', 'fc_w', 'fc_h'].forEach(id => {
+                document.getElementById(id).addEventListener('input', drawFacecamCanvas);
+            });
+            document.getElementById('btn-extract-frame').addEventListener('click', loadSourcePreview);
+            document.getElementById('btn-preview-916').addEventListener('click', previewLayout916);
+            document.getElementById('btn-transcribe').addEventListener('click', transcribeVideo);
+            document.getElementById('btn-render-action').addEventListener('click', renderClipNow);
+            document.getElementById('btn-cancel-action').addEventListener('click', cancelActiveRender);
+            document.getElementById('btn-export-quick').addEventListener('click', exportCurrentClipQuick);
+            document.getElementById('btn-refresh-clips').addEventListener('click', loadClipsList);
+            document.getElementById('btn-save-result').addEventListener('click', saveClipResult);
+
+            const canvas = document.getElementById('facecam-canvas');
+            const updateBoxFromPointer = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const cx = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                const cy = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+                const sx = srcWidth / rect.width;
+                const sy = srcHeight / rect.height;
+                document.getElementById('fc_x').value = Math.round(Math.min(dragStart.x, cx) * sx);
+                document.getElementById('fc_y').value = Math.round(Math.min(dragStart.y, cy) * sy);
+                document.getElementById('fc_w').value = Math.max(80, Math.round(Math.abs(cx - dragStart.x) * sx));
+                document.getElementById('fc_h').value = Math.max(80, Math.round(Math.abs(cy - dragStart.y) * sy));
+                drawFacecamCanvas();
+            };
+            canvas.addEventListener('pointerdown', (e) => {
+                canvas.setPointerCapture(e.pointerId);
+                const rect = canvas.getBoundingClientRect();
+                isDragging = true;
+                dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            });
+            canvas.addEventListener('pointermove', (e) => {
+                if (!isDragging || !dragStart) return;
+                updateBoxFromPointer(e);
+            });
+            canvas.addEventListener('pointerup', (e) => {
+                if (!isDragging) return;
+                updateBoxFromPointer(e);
+                isDragging = false;
+                dragStart = null;
+            });
+
+            document.addEventListener('keydown', (e) => {
+                const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    renderClipNow();
+                    return;
+                }
+                if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+                const sp = document.getElementById('source-player');
+                if (e.key.toLowerCase() === 'i') {
+                    document.getElementById('inicio_s').value = (sp.currentTime || 0).toFixed(1);
+                    validateCutBounds();
+                } else if (e.key.toLowerCase() === 'o') {
+                    document.getElementById('fim_s').value = (sp.currentTime || 0).toFixed(1);
+                    validateCutBounds();
+                }
+            });
+        }
 
         window.addEventListener('DOMContentLoaded', () => {
+            bindEvents();
+            restoreFormState();
+            const hashTab = (location.hash || '').replace('#', '');
+            if (['studio', 'results', 'control'].includes(hashTab)) switchTab(hashTab);
             loadSystemStatus();
             loadSourcesList();
             loadClipsList();
             loadPresetsList();
-            const canvas = document.getElementById('facecam-canvas');
-            if (canvas) {
-                canvas.addEventListener('mousedown', (e) => {
-                    const rect = canvas.getBoundingClientRect();
-                    dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-                });
-                canvas.addEventListener('mouseup', (e) => {
-                    if (!dragStart) return;
-                    const rect = canvas.getBoundingClientRect();
-                    const x2 = e.clientX - rect.left;
-                    const y2 = e.clientY - rect.top;
-                    const sx = srcWidth / rect.width;
-                    const sy = srcHeight / rect.height;
-                    const rx = Math.round(Math.min(dragStart.x, x2) * sx);
-                    const ry = Math.round(Math.min(dragStart.y, y2) * sy);
-                    const rw = Math.max(80, Math.round(Math.abs(x2 - dragStart.x) * sx));
-                    const rh = Math.max(80, Math.round(Math.abs(y2 - dragStart.y) * sy));
-                    document.getElementById('fc_x').value = rx;
-                    document.getElementById('fc_y').value = ry;
-                    document.getElementById('fc_w').value = rw;
-                    document.getElementById('fc_h').value = rh;
-                    dragStart = null;
-                    drawFacecamCanvas();
-                });
-            }
+            loadSourceVideo();
         });
     </script>
 </body>

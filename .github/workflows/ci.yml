@@ -38,5 +38,8 @@ jobs:
           print('UTF-8 OK em todos os arquivos fastclipper/')
           "
 
+      - name: Generate synthetic test media
+        run: python tests/fixtures/gerar_midia_sintetica.py
+
       - name: Run Fast Clipper test suite
         run: pytest -m "not golden and not heavy" -v

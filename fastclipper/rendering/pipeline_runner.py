@@ -152,6 +152,7 @@ class PipelineRunner:
             mode=mode,
             facecam_rect=fc_rect,
             gameplay_rect=gp_rect,
+            stacked_facecam_height=int(params.get("stacked_facecam_height", 720)),
         )
 
         # 3. Geração de Legendas (.ass) se houver palavras/cues

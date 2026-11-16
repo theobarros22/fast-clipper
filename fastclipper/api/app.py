@@ -206,41 +206,12 @@ class StudioRenderRequest(BaseModel):
     layout: str = "solo"
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
+    stacked_facecam_height: int = 720
     subtitle_text: Optional[str] = None
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
-
-
-class GenerateCopyRequest(BaseModel):
-    transcript_text: str
-    platform: str = "tiktok"
-    channel_name: Optional[str] = None
-    use_llm: bool = False
-
-
-class ExportPackageRequest(BaseModel):
-    clip_filename: str
-    platform: str = "tiktok"
-    title: str
-    description: str
-    hashtags: List[str] = []
-    words: Optional[List[Dict[str, Any]]] = None
-    cover_timestamp_s: float = 0.5
-
-
-class ClipResultRequest(BaseModel):
-    clip_filename: str
-    platform: str
-    post_url: Optional[str] = None
-    views_24h: int = 0
-    views_7d: int = 0
-    revenue_brl: float = 0.0
-    layout_mode: Optional[str] = None
-    subtitle_preset: Optional[str] = None
-    channel_id: Optional[str] = None
-    notes: Optional[str] = None
 
 
 class ImportSourceRequest(BaseModel):
@@ -307,6 +278,7 @@ class BatchRenderRequest(BaseModel):
     layout: str = "solo"
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
+    stacked_facecam_height: int = 720
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
@@ -586,6 +558,30 @@ def stream_studio_clip(filename: str):
     return FileResponse(str(caminho), media_type="video/mp4", filename=filename)
 
 
+@app.delete("/api/v1/studio/clips/{filename}", tags=["Studio"])
+def delete_studio_clip(filename: str):
+    """Remove um clipe renderizado do diretório de saída."""
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=403, detail="Nome de arquivo inválido.")
+    out_dir = pipeline_runner.output_dir.resolve()
+    caminho = (out_dir / filename).resolve()
+    if caminho.parent != out_dir:
+        raise HTTPException(status_code=403, detail="Acesso negado fora da pasta de saída.")
+    if not caminho.is_file():
+        raise HTTPException(status_code=404, detail="Clipe não encontrado.")
+    caminho.unlink()
+    return {"deleted": True, "filename": filename}
+
+
+@app.get("/api/v1/studio/source-video", tags=["Studio"])
+def stream_source_video(path: str = Query(...)):
+    """Serve o vídeo fonte autorizado para reprodução e marcação I/O no Studio."""
+    safe_path = validate_input_path(path)
+    if not safe_path.is_file():
+        raise HTTPException(status_code=404, detail="Vídeo fonte não encontrado.")
+    return FileResponse(str(safe_path), media_type="video/mp4", filename=safe_path.name)
+
+
 @app.post("/api/v1/studio/sources/import", tags=["Studio"])
 def studio_import_source(req: ImportSourceRequest):
     """Importa um arquivo de vídeo local autorizado e registra no SQLite."""
@@ -785,6 +781,7 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "layout": req.layout,
             "facecam_rect": req.facecam_rect,
             "gameplay_rect": req.gameplay_rect,
+            "stacked_facecam_height": req.stacked_facecam_height,
             "subtitles": req.words,
             "subtitles_are_absolute": req.subtitles_are_absolute,
             "subtitle_preset": req.subtitle_preset,
@@ -880,6 +877,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "layout": req.layout,
         "facecam_rect": req.facecam_rect,
         "gameplay_rect": req.gameplay_rect,
+        "stacked_facecam_height": req.stacked_facecam_height,
         "subtitles": subtitles_payload,
         "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,

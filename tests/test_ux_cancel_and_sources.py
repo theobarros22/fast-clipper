@@ -60,8 +60,48 @@ def test_api_cancel_batch_status_and_hardware_chips():
 def test_studio_html_ux_invariants():
     html = (ROOT / "fastclipper" / "web" / "studio.html").read_text(encoding="utf-8")
     assert "alert(" not in html
+    assert "innerHTML" not in html
     assert 'id="fc-statusbar"' in html
     assert 'id="btn-cancel-action"' in html
     assert 'id="sources-select"' in html
     assert 'id="dl_url"' in html
     assert 'id="export-platform"' in html
+    assert 'id="source-player"' in html
+    assert 'role="tablist"' in html
+
+
+def test_source_video_stream_and_delete_clip():
+    # 1. Source video streaming (S3) + bloqueio fora de pastas permitidas
+    res_src = client.get(f"/api/v1/studio/source-video?path={SYNTHETIC_VIDEO}")
+    assert res_src.status_code == 200
+    assert "video/mp4" in res_src.headers.get("content-type", "")
+
+    res_forb = client.get("/api/v1/studio/source-video?path=README.md")
+    assert res_forb.status_code == 403
+
+    # 2. Renderiza e exclui clipe (S15) + stacked_facecam_height (S11)
+    res_rend = client.post(
+        "/api/v1/studio/render-now",
+        json={
+            "video_path": str(SYNTHETIC_VIDEO),
+            "inicio_s": 0.0,
+            "fim_s": 1.2,
+            "layout": "stacked",
+            "facecam_rect": {"x": 50, "y": 50, "w": 300, "h": 220},
+            "stacked_facecam_height": 680,
+            "burn_subtitles": False,
+        },
+    )
+    assert res_rend.status_code == 200
+    fname = res_rend.json()["filename"]
+    assert Path(res_rend.json()["output_path"]).is_file()
+
+    res_del = client.delete(f"/api/v1/studio/clips/{fname}")
+    assert res_del.status_code == 200
+    assert res_del.json()["deleted"] is True
+
+    res_del_404 = client.delete(f"/api/v1/studio/clips/{fname}")
+    assert res_del_404.status_code == 404
+
+    res_trav = client.delete("/api/v1/studio/clips/..%5C..%5CREADME.md")
+    assert res_trav.status_code in (403, 404)
