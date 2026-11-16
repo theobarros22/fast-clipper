@@ -46,6 +46,11 @@ class YouTubeLiveIngestor:
         "www.twitter.com",
         "mobile.twitter.com",
         "video.twimg.com",
+        "twitch.tv",
+        "www.twitch.tv",
+        "m.twitch.tv",
+        "kick.com",
+        "www.kick.com",
     ]
 
     def __init__(
@@ -94,7 +99,7 @@ class YouTubeLiveIngestor:
         if not dominio_valido:
             raise SecuritySSRFError(
                 f"Domínio não homologado para ingestão ao vivo: {hostname}. "
-                f"Apenas fontes oficiais do YouTube e X (Twitter) são permitidas."
+                f"Apenas fontes oficiais do YouTube, X (Twitter), Twitch e Kick são permitidas."
             )
 
     @staticmethod
@@ -102,6 +107,10 @@ class YouTubeLiveIngestor:
         hostname = (urllib.parse.urlparse(url).hostname or "").lower()
         if any(hostname == d or hostname.endswith("." + d) for d in ("x.com", "twitter.com", "video.twimg.com")):
             return "x"
+        if any(hostname == d or hostname.endswith("." + d) for d in ("twitch.tv",)):
+            return "twitch"
+        if any(hostname == d or hostname.endswith("." + d) for d in ("kick.com",)):
+            return "kick"
         return "youtube"
 
     def check_disk_space_gb(self) -> float:

@@ -23,6 +23,12 @@ def test_live_ssrf_allows_youtube_and_x_blocks_private(tmp_path):
     tw = YouTubeLiveIngestor("https://twitter.com/i/broadcasts/1OyKAV", tmp_path / "tw")
     assert tw.detect_platform("https://twitter.com/i/broadcasts/1OyKAV") == "x"
 
+    twitch = YouTubeLiveIngestor("https://www.twitch.tv/streamer", tmp_path / "twitch")
+    assert twitch.detect_platform("https://www.twitch.tv/streamer") == "twitch"
+
+    kick = YouTubeLiveIngestor("https://kick.com/streamer", tmp_path / "kick")
+    assert kick.detect_platform("https://kick.com/streamer") == "kick"
+
     for bad in ("http://127.0.0.1:8000/secret", "http://localhost/live", "https://evil.internal/stream.m3u8"):
         with pytest.raises(SecuritySSRFError):
             YouTubeLiveIngestor(bad, tmp_path / "bad")
@@ -136,6 +142,7 @@ def test_studio_live_api_endpoints():
     assert "live_keywords" in home.text
     assert "live_clip_duration" in home.text
     assert "btn-cleanup-live" in home.text
+    assert "btn-copy-export-text" in home.text
     assert "innerHTML" not in home.text
 
     storage = client.get("/api/v1/studio/storage")

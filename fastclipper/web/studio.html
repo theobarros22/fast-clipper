@@ -433,12 +433,12 @@
                 </div>
 
                 <details class="details-box" id="live-clipper-box">
-                    <summary>Clipar transmissão ao vivo (YouTube / X)</summary>
+                    <summary>Clipar transmissão ao vivo (YouTube / X / Twitch / Kick)</summary>
                     <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
                         <div class="row-2">
                             <div>
-                                <label class="label" for="live_url">URL da live (YouTube ou X)</label>
-                                <input type="text" id="live_url" class="input-text" placeholder="https://www.youtube.com/watch?v=... ou https://x.com/...">
+                                <label class="label" for="live_url">URL da live (YouTube, X, Twitch ou Kick)</label>
+                                <input type="text" id="live_url" class="input-text" placeholder="https://www.youtube.com/watch?v=... ou https://x.com/... ou https://twitch.tv/...">
                             </div>
                             <div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap;">
                                 <label class="checkbox-row" style="margin:0 4px 6px 0;">
@@ -643,6 +643,7 @@
                     </select>
                     <button id="btn-export-quick" type="button" class="btn-sec">Exportar pacote</button>
                     <a id="btn-download-zip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar ZIP</a>
+                    <button id="btn-copy-export-text" type="button" class="chip" style="display:none;">Copiar Copy</button>
                 </div>
                 <div id="export-copy-preview" style="display:none; margin-top:10px; text-align:left; font-size:12px; color:var(--sub); background:var(--raised); border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; white-space:pre-wrap;"></div>
             </section>
@@ -1020,7 +1021,8 @@ http://127.0.0.1:8000/docs</div>
 
             const statusEl = document.getElementById('live-status-text');
             if (running) {
-                const plat = st.platform === 'x' ? 'X' : 'YouTube';
+                const platMap = { x: 'X', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' };
+                const plat = platMap[st.platform] || 'YouTube';
                 const snip = st.last_transcript_snippet ? ` · "${st.last_transcript_snippet}"` : '';
                 statusEl.textContent = `Ao vivo (${plat}) · ${fmtNum(st.buffer_duration_s || 0, 0)}s em buffer · ${st.clips_generated || 0} clipe(s)${snip}`;
             } else if (st && st.last_error) {
@@ -1538,10 +1540,12 @@ http://127.0.0.1:8000/docs</div>
                     zipLink.style.display = 'inline';
                 }
                 const copyPrev = document.getElementById('export-copy-preview');
+                const copyBtn = document.getElementById('btn-copy-export-text');
                 if (copyPrev) {
                     copyPrev.textContent = `${copy.title}\n${copy.description}\n${(copy.hashtags || []).join(' ')}`;
                     copyPrev.style.display = 'block';
                 }
+                if (copyBtn) copyBtn.style.display = 'inline-block';
                 setStatus(`Pacote exportado em: ${data.package_dir}`, 'idle');
             } catch (err) {
                 setStatus(`Erro na exportação: ${err.message}`, 'err');
@@ -1688,6 +1692,16 @@ http://127.0.0.1:8000/docs</div>
             });
             document.getElementById('btn-live-mark-post').addEventListener('click', () => markLiveClip(15, 15));
             document.getElementById('btn-cleanup-live').addEventListener('click', cleanupLiveBuffers);
+            document.getElementById('btn-copy-export-text').addEventListener('click', async () => {
+                const txt = (document.getElementById('export-copy-preview').textContent || '').trim();
+                if (!txt) return;
+                try {
+                    await navigator.clipboard.writeText(txt);
+                    setStatus('Título, descrição e hashtags copiados!', 'idle');
+                } catch (_) {
+                    setStatus('Selecione e copie o texto da prévia manualmente.', 'warn');
+                }
+            });
             document.getElementById('btn-download-vod').addEventListener('click', downloadSourceUrl);
             document.getElementById('btn-suggest').addEventListener('click', suggestMoments);
             document.getElementById('btn-batch-render').addEventListener('click', renderBatchSelected);
