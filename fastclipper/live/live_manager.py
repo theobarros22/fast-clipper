@@ -335,7 +335,7 @@ class LiveClipSession:
                     self.last_transcript_snippet = txt[-140:]
                     low = txt.lower()
                     for kw in self.auto_clip_keywords:
-                        if kw in low:
+                        if re.search(rf"\b{re.escape(kw)}\b", low):
                             return f"Auto Palavra: {kw}"
             except Exception as exc:
                 logger.warning("Erro ao avaliar palavras-chave no segmento ao vivo: %s", exc)
@@ -506,7 +506,7 @@ class LiveClipSession:
                 "aspect_ratio": opts.get("aspect_ratio", "9:16"),
                 "subtitles": subtitles_words,
                 "subtitles_are_absolute": False,
-                "subtitle_preset": opts.get("subtitle_preset", "viral_clean"),
+                "subtitle_preset": opts.get("subtitle_preset", "minimal_clean"),
                 "burn_subtitles": burn_subs and bool(subtitles_words),
                 "normalize_audio": bool(opts.get("normalize_audio", False)),
                 "watermark_text": opts.get("watermark_text"),

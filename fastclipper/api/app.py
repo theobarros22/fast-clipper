@@ -15,11 +15,11 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Header, Query, Request, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fastclipper.collaboration.models import AuthContext, EstadoMomento, PapelUsuario
 from fastclipper.collaboration.service import (
@@ -210,10 +210,26 @@ class KillSwitchRequest(BaseModel):
     active: bool
 
 
+VALID_SUBTITLE_PRESETS = {"viral_bounce", "minimal_clean", "cinema_editorial"}
+
+
+def _check_even_facecam_height(v: int) -> int:
+    if v < 200 or v > 1720 or v % 2 != 0:
+        raise ValueError("stacked_facecam_height deve ser um número par entre 200 e 1720.")
+    return v
+
+
+def _check_subtitle_preset(v: str) -> str:
+    val = (v or "").strip().lower()
+    if val not in VALID_SUBTITLE_PRESETS:
+        raise ValueError(f"subtitle_preset inválido: '{v}'. Use: {sorted(VALID_SUBTITLE_PRESETS)}.")
+    return val
+
+
 class StudioRenderRequest(BaseModel):
     video_path: str
-    inicio_s: float
-    fim_s: float
+    inicio_s: float = Field(ge=0.0)
+    fim_s: float = Field(gt=0.0)
     layout: str = "solo"
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
@@ -226,6 +242,22 @@ class StudioRenderRequest(BaseModel):
     burn_subtitles: bool = True
     normalize_audio: bool = False
     watermark_text: Optional[str] = None
+
+    @field_validator("stacked_facecam_height")
+    @classmethod
+    def _val_h(cls, v: int) -> int:
+        return _check_even_facecam_height(v)
+
+    @field_validator("subtitle_preset")
+    @classmethod
+    def _val_preset(cls, v: str) -> str:
+        return _check_subtitle_preset(v)
+
+    @model_validator(mode="after")
+    def _val_bounds(self) -> "StudioRenderRequest":
+        if self.fim_s <= self.inicio_s:
+            raise ValueError("fim_s deve ser maior que inicio_s.")
+        return self
 
 
 class ImportSourceRequest(BaseModel):
@@ -256,10 +288,20 @@ class LiveStartRequest(BaseModel):
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
     burn_subtitles: bool = False
-    subtitle_preset: str = "viral_clean"
+    subtitle_preset: str = "minimal_clean"
     language: str = "pt"
     normalize_audio: bool = False
     watermark_text: Optional[str] = None
+
+    @field_validator("stacked_facecam_height")
+    @classmethod
+    def _val_h(cls, v: int) -> int:
+        return _check_even_facecam_height(v)
+
+    @field_validator("subtitle_preset")
+    @classmethod
+    def _val_preset(cls, v: str) -> str:
+        return _check_subtitle_preset(v)
 
 
 class LiveMarkRequest(BaseModel):
@@ -276,6 +318,16 @@ class LiveMarkRequest(BaseModel):
     language: Optional[str] = None
     normalize_audio: Optional[bool] = None
     watermark_text: Optional[str] = None
+
+    @field_validator("stacked_facecam_height")
+    @classmethod
+    def _val_h(cls, v: Optional[int]) -> Optional[int]:
+        return _check_even_facecam_height(v) if v is not None else None
+
+    @field_validator("subtitle_preset")
+    @classmethod
+    def _val_preset(cls, v: Optional[str]) -> Optional[str]:
+        return _check_subtitle_preset(v) if v is not None else None
 
 
 class TranscribeRequest(BaseModel):
@@ -313,13 +365,19 @@ class ChannelPresetRequest(BaseModel):
 class SuggestMomentsRequest(BaseModel):
     video_path: str
     words: Optional[List[Dict[str, Any]]] = None
-    target_duration_s: float = 25.0
-    top_k: int = 5
+    target_duration_s: float = Field(25.0, ge=1.0)
+    top_k: int = Field(5, ge=1, le=50)
 
 
 class BatchRenderItem(BaseModel):
-    inicio_s: float
-    fim_s: float
+    inicio_s: float = Field(ge=0.0)
+    fim_s: float = Field(gt=0.0)
+
+    @model_validator(mode="after")
+    def _val_bounds(self) -> "BatchRenderItem":
+        if self.fim_s <= self.inicio_s:
+            raise ValueError("fim_s deve ser maior que inicio_s.")
+        return self
 
 
 class BatchRenderRequest(BaseModel):
@@ -337,6 +395,16 @@ class BatchRenderRequest(BaseModel):
     normalize_audio: bool = False
     watermark_text: Optional[str] = None
 
+    @field_validator("stacked_facecam_height")
+    @classmethod
+    def _val_h(cls, v: int) -> int:
+        return _check_even_facecam_height(v)
+
+    @field_validator("subtitle_preset")
+    @classmethod
+    def _val_preset(cls, v: str) -> str:
+        return _check_subtitle_preset(v)
+
 
 class GenerateCopyRequest(BaseModel):
     transcript_text: str
@@ -352,16 +420,18 @@ class ExportPackageRequest(BaseModel):
     description: str
     hashtags: List[str] = []
     words: Optional[List[Dict[str, Any]]] = None
-    cover_timestamp_s: float = 0.5
+    cover_timestamp_s: float = Field(0.5, ge=0.0)
+    inicio_s: float = Field(0.0, ge=0.0)
+    fim_s: Optional[float] = Field(None, gt=0.0)
 
 
 class ClipResultRequest(BaseModel):
     clip_filename: str
-    platform: str
+    platform: Literal["tiktok", "shorts", "reels", "youtube", "x"]
     post_url: Optional[str] = None
-    views_24h: int = 0
-    views_7d: int = 0
-    revenue_brl: float = 0.0
+    views_24h: int = Field(0, ge=0)
+    views_7d: int = Field(0, ge=0)
+    revenue_brl: float = Field(0.0, ge=0.0)
     layout_mode: Optional[str] = None
     subtitle_preset: Optional[str] = None
     channel_id: Optional[str] = None
@@ -875,14 +945,21 @@ def studio_suggest_moments(req: SuggestMomentsRequest):
         raise HTTPException(status_code=400, detail=probe.message)
 
     suggester = MomentSuggester()
-    suggestions = suggester.suggest(
-        video_path=safe_path,
-        duration_s=probe.duration_s or 10.0,
-        words=req.words,
-        target_duration_s=req.target_duration_s,
-        top_k=req.top_k,
-    )
-    return {"suggestions": suggestions, "duration_s": probe.duration_s}
+    try:
+        suggestions = suggester.suggest(
+            video_path=safe_path,
+            duration_s=probe.duration_s or 10.0,
+            words=req.words,
+            target_duration_s=req.target_duration_s,
+            top_k=req.top_k,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "suggestions": suggestions,
+        "duration_s": probe.duration_s,
+        "warning": suggester.last_warning,
+    }
 
 
 @app.post("/api/v1/studio/render-batch", tags=["Studio"])
@@ -1163,6 +1240,11 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
 # Painel Web Operacional (Calm Premium Design System)
 # -----------------------------------------------------------------------------
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
+
 @app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 def get_dashboard():
     studio_html = ROOT / "fastclipper" / "web" / "studio.html"
@@ -1202,6 +1284,8 @@ def studio_export_package(req: ExportPackageRequest):
         hashtags=req.hashtags,
         words=req.words,
         cover_timestamp_s=req.cover_timestamp_s,
+        inicio_s=req.inicio_s,
+        fim_s=req.fim_s,
     )
 
 

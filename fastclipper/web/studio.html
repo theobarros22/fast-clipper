@@ -368,10 +368,10 @@
 </head>
 <body>
     <header class="header">
-        <div class="brand">
+        <h1 class="brand" style="margin:0;">
             Fast<span class="accent">Clipper</span>
             <span class="tag-studio">Studio Local</span>
-        </div>
+        </h1>
         <div class="chips-bar">
             <span class="hw-chip" id="chip-ffmpeg"><span class="dot"></span>FFmpeg</span>
             <span class="hw-chip" id="chip-gpu"><span class="dot"></span>Hardware</span>
@@ -408,7 +408,7 @@
                         <input type="text" id="video_path" class="input-text" style="flex:1;"
                                value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
                                placeholder="Ex: data/projects/meu_canal/source/live.mp4">
-                        <input type="file" id="local-video-upload" accept="video/*,.mkv,.ts" style="display:none;">
+                        <input type="file" id="local-video-upload" aria-label="Selecionar arquivo de vídeo do computador" accept="video/*,.mkv,.ts" style="display:none;">
                         <button type="button" id="btn-upload-local" class="chip" style="white-space:nowrap;">Enviar do PC</button>
                     </div>
                 </div>
@@ -458,7 +458,7 @@
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <input type="text" id="live_keywords" class="input-text" style="flex:1; min-width:220px;" placeholder="Palavras-chave auto-clip (ex: absurdo, olha isso, urgente)">
+                            <input type="text" id="live_keywords" aria-label="Palavras-chave para auto-clip ao vivo" class="input-text" style="flex:1; min-width:220px;" placeholder="Palavras-chave auto-clip (ex: absurdo, olha isso, urgente)">
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <select id="live_clip_duration" aria-label="Duração do corte ao vivo" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
@@ -577,8 +577,8 @@
                             </div>
                         </div>
                         <div class="field" style="margin-bottom:4px;">
-                            <label class="label" for="h-facecam">Altura da facecam no topo (px)</label>
-                            <input type="number" id="h-facecam" class="input-text" value="720" min="360" max="1200" step="20">
+                            <label class="label" for="h-facecam">Altura da facecam no topo (px, par 200–1720)</label>
+                            <input type="number" id="h-facecam" class="input-text" value="720" min="200" max="1720" step="2">
                         </div>
                     </div>
                 </div>
@@ -608,7 +608,7 @@
                     </div>
                     <div class="field" style="display:flex; flex-direction:column; justify-content:center; gap:8px; margin-top:18px;">
                         <label for="burn_subtitles" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-                            <input type="checkbox" id="burn_subtitles" checked style="width:17px; height:17px;">
+                            <input type="checkbox" id="burn_subtitles" style="width:17px; height:17px;">
                             Queimar legendas no vídeo
                         </label>
                         <label for="normalize_audio" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
@@ -621,7 +621,7 @@
                 <div class="field">
                     <label class="label" for="subtitle_text">Texto da legenda / gancho</label>
                     <textarea id="subtitle_text" class="textarea" rows="2"
-                              placeholder="Transcreva o áudio ou digite o texto...">ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL</textarea>
+                              placeholder="Ex: ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL"></textarea>
                 </div>
 
                 <div class="actions-row">
@@ -779,6 +779,7 @@ http://127.0.0.1:8000/docs</div>
 
         let currentLayout = 'solo';
         let currentClipFilename = null;
+        let lastClipBounds = null;
         let sourceDuration = null;
         let transcribedWords = null;
         let lastSuggestions = [];
@@ -1335,6 +1336,9 @@ http://127.0.0.1:8000/docs</div>
                 if (data.full_text) {
                     document.getElementById('subtitle_text').value = data.full_text;
                 }
+                if (transcribedWords.length > 0) {
+                    document.getElementById('burn_subtitles').checked = true;
+                }
                 saveFormState();
                 setStatus(`${transcribedWords.length} palavras sincronizadas (${data.from_cache ? 'cache' : 'transcrição nova'}).`, 'idle');
             } catch (err) {
@@ -1516,6 +1520,7 @@ http://127.0.0.1:8000/docs</div>
                     }),
                 });
                 setStatus(`Clipe pronto (${data.duration.toFixed(1)}s): ${data.filename}`, 'idle');
+                lastClipBounds = { filename: data.filename, inicio_s: inicioS, fim_s: fimS };
                 playClipInMockup(data.download_url, data.filename);
                 loadClipsList();
             } catch (err) {
@@ -1571,6 +1576,9 @@ http://127.0.0.1:8000/docs</div>
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ transcript_text: txt || 'Corte da live', platform }),
                 });
+                const bounds = (lastClipBounds && lastClipBounds.filename === currentClipFilename)
+                    ? { inicio_s: lastClipBounds.inicio_s, fim_s: lastClipBounds.fim_s }
+                    : { inicio_s: 0.0, fim_s: null };
                 const data = await api('/api/v1/studio/export-package', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1581,6 +1589,7 @@ http://127.0.0.1:8000/docs</div>
                         description: copy.description,
                         hashtags: copy.hashtags,
                         words: transcribedWords,
+                        ...bounds,
                     }),
                 });
                 const zipLink = document.getElementById('btn-download-zip');

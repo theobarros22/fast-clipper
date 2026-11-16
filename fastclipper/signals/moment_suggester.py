@@ -139,6 +139,10 @@ class MomentSuggester:
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
         """Retorna top_k sugestões com pontuação, justificativa e limites alinhados a frases."""
+        if top_k < 1 or target_duration_s < 1.0:
+            raise ValueError("top_k deve ser >= 1 e target_duration_s deve ser >= 1.0.")
+
+        self.last_warning: Optional[str] = None
         words = words or []
         total_dur = max(1.0, float(duration_s))
         half_win = max(2.0, target_duration_s / 2.0)
@@ -146,8 +150,9 @@ class MomentSuggester:
         # 1. Sinais de áudio (quando vídeo tiver faixa de áudio)
         try:
             audio_peaks = self.audio_detector.analyze_audio(video_path)
-        except Exception:
+        except Exception as exc:
             audio_peaks = []
+            self.last_warning = f"Análise de áudio indisponível ({exc}); usando janelas editoriais."
 
         # 2. Sinais da transcrição (palavras-chave de emoção/gancho)
         rows = words_to_subtitle_rows(words)
@@ -166,7 +171,7 @@ class MomentSuggester:
 
         for row in rows:
             lower = row.text.lower()
-            hits = [kw for kw in kw_set if kw in lower]
+            hits = [kw for kw in kw_set if re.search(rf"\b{re.escape(kw)}\b", lower)]
             if hits or "!" in row.text or "?" in row.text:
                 raw_events.append({
                     "center_s": (row.start_s + row.end_s) / 2.0,

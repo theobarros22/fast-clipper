@@ -39,6 +39,8 @@ class PackageExporter:
         hashtags: List[str],
         words: Optional[List[Dict[str, Any]]] = None,
         cover_timestamp_s: float = 0.5,
+        inicio_s: float = 0.0,
+        fim_s: Optional[float] = None,
     ) -> Dict[str, Any]:
         src = Path(clip_path).resolve()
         if not src.is_file():
@@ -53,17 +55,22 @@ class PackageExporter:
         out_mp4 = pkg_dir / f"{slug}.mp4"
         shutil.copy2(src, out_mp4)
 
-        # 2. Gera SRT se houver palavras
+        # 2. Gera SRT se houver palavras (filtrando e deslocando para o tempo relativo do clipe)
         out_srt: Optional[Path] = None
         if words:
-            wt = [
-                WordTiming(
-                    word=str(w.get("word", "")),
-                    start_s=float(w.get("start_s", 0.0)),
-                    end_s=float(w.get("end_s", 0.0)),
-                )
-                for w in words
-            ]
+            t_ini = max(0.0, float(inicio_s or 0.0))
+            t_fim = float(fim_s) if fim_s is not None else None
+            wt = []
+            for w in words:
+                ws = float(w.get("start_s", 0.0))
+                we = float(w.get("end_s", 0.0))
+                if we <= t_ini:
+                    continue
+                if t_fim is not None and ws >= t_fim:
+                    continue
+                rel_s = max(0.0, ws - t_ini)
+                rel_e = max(rel_s + 0.05, (min(t_fim, we) if t_fim is not None else we) - t_ini)
+                wt.append(WordTiming(word=str(w.get("word", "")), start_s=rel_s, end_s=rel_e))
             cues = self.subtitle_engine.chunk_words(wt)
             if cues:
                 out_srt = pkg_dir / f"{slug}.srt"

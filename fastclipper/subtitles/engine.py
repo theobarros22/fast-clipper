@@ -154,6 +154,9 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+        def _escape_ass(txt: str) -> str:
+            return txt.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+
         dialogues = []
         for cue in cues:
             start_str = to_ass_time(cue.start_s)
@@ -164,10 +167,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 partes = []
                 for w in cue.words:
                     dur_cs = int(round((w.end_s - w.start_s) * 100))
-                    partes.append(f"{{\\k{dur_cs}}}{w.word}")
+                    partes.append(f"{{\\k{dur_cs}}}{_escape_ass(w.word)}")
                 texto_formatado = " ".join(partes)
             else:
-                texto_formatado = cue.text
+                texto_formatado = _escape_ass(cue.text)
 
             dialogues.append(f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{texto_formatado}")
 

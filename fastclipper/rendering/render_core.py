@@ -38,6 +38,7 @@ def render_vertical_ffmpeg(
     cancel_event: Optional[threading.Event] = None,
     normalize_audio: bool = False,
     watermark_text: Optional[str] = None,
+    error_out: Optional[List[str]] = None,
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -65,6 +66,13 @@ def render_vertical_ffmpeg(
     target_h = layout_config.target_height if layout_config is not None else 1920
 
     if layout_config is not None:
+        safety = layout_engine.validate_layout_safety(layout_config, source_w, source_h)
+        if not safety.get("safe", True):
+            msg = "; ".join(safety.get("errors", [])) or "Layout inválido fora dos limites do vídeo."
+            logger.error("Layout reprovado antes do FFmpeg: %s", msg)
+            if error_out is not None:
+                error_out.append(msg)
+            return False
         filtro_base = layout_engine.build_filter_graph(layout_config, source_w, source_h)
         is_stacked = (
             layout_config.effective_mode() == LayoutMode.STACKED
@@ -142,6 +150,10 @@ def render_vertical_ffmpeg(
 
     if rc != 0:
         logger.error("Erro no FFmpeg: %s", stderr)
+        if error_out is not None:
+            tail = " | ".join(ln.strip() for ln in (stderr or "").splitlines() if ln.strip())[-400:]
+            if tail:
+                error_out.append(tail)
         return False
     return True
 

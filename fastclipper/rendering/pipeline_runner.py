@@ -234,6 +234,7 @@ class PipelineRunner:
         output_filename = params.get("output_filename") or f"{job_id}{suffix}"
         caminho_saida = self.output_dir / output_filename
 
+        ffmpeg_errors: List[str] = []
         render_ok = self._render_ffmpeg_direct(
             source_path=video_path,
             start_s=inicio_s,
@@ -244,16 +245,18 @@ class PipelineRunner:
             normalize_audio=bool(params.get("normalize_audio", False)),
             watermark_text=params.get("watermark_text"),
             cancel_event=cancel_event,
+            error_out=ffmpeg_errors,
         )
 
         if not render_ok or not caminho_saida.exists():
             caminho_saida.unlink(missing_ok=True)
             if ass_path is not None:
                 ass_path.unlink(missing_ok=True)
+            detail = ffmpeg_errors[-1] if ffmpeg_errors else "Falha na execução do pipeline FFmpeg de renderização."
             return JobExecutionResult(
                 job_id=job_id,
                 success=False,
-                error="Falha na execução do pipeline FFmpeg de renderização.",
+                error=detail,
             )
 
         # 5. Validação Estrita do Clipe Renderizado com FFprobe
@@ -419,6 +422,7 @@ class PipelineRunner:
         normalize_audio: bool = False,
         watermark_text: Optional[str] = None,
         cancel_event: Optional[threading.Event] = None,
+        error_out: Optional[List[str]] = None,
     ) -> bool:
         """Renderiza via núcleo unificado render_core com suporte a layout 9:16 e legenda ASS."""
         return render_vertical_ffmpeg(
@@ -434,6 +438,7 @@ class PipelineRunner:
             cancel_event=cancel_event,
             normalize_audio=normalize_audio,
             watermark_text=watermark_text,
+            error_out=error_out,
         )
 
     def _parse_subtitles_data(

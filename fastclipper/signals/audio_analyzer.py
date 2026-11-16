@@ -5,11 +5,12 @@ Calcula a linha de base móvel de volume para evitar confundir jogos naturalment
 barulhentos com momentos de interesse real do streamer.
 """
 
+import array
 import logging
 import math
 import shutil
-import struct
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -61,34 +62,61 @@ class AudioPeakDetector:
             "-",
         ])
 
-        try:
-            res = subprocess.run(cmd, capture_output=True, check=True, timeout=180)
-            raw_bytes = res.stdout
-        except subprocess.CalledProcessError as e:
-            logger.warning("Falha ao extrair áudio de %s: %s", video, e)
-            return []
-
-        if not raw_bytes:
-            return []
-
-        # Converte bytes PCM 16-bit para inteiros
-        num_amostras = len(raw_bytes) // 2
-        amostras = struct.unpack(f"<{num_amostras}h", raw_bytes[:num_amostras * 2])
-
         amostras_por_janela = int(self.sample_rate * self.window_duration_s)
         if amostras_por_janela <= 0:
             return []
 
-        # Calcula RMS de cada janela temporal
+        window_bytes = amostras_por_janela * 2
         janelas_rms = []
-        for i in range(0, len(amostras), amostras_por_janela):
-            bloco = amostras[i : i + amostras_por_janela]
-            if not bloco:
-                continue
-            soma_quadrados = sum(float(x) * float(x) for x in bloco)
-            rms = math.sqrt(soma_quadrados / len(bloco))
-            tempo_centro = start_s + (i + len(bloco) / 2) / self.sample_rate
-            janelas_rms.append((tempo_centro, rms))
+        sample_offset = 0
+
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except OSError as e:
+            logger.warning("Falha ao iniciar FFmpeg para análise de áudio de %s: %s", video, e)
+            return []
+
+        try:
+            assert proc.stdout is not None
+            remainder = b""
+            while True:
+                chunk = proc.stdout.read(window_bytes - len(remainder))
+                if not chunk:
+                    buf = remainder
+                    remainder = b""
+                else:
+                    buf = remainder + chunk
+                    if len(buf) < window_bytes:
+                        remainder = buf
+                        continue
+                    remainder = b""
+
+                usable = (len(buf) // 2) * 2
+                if usable >= 2:
+                    arr = array.array("h")
+                    arr.frombytes(buf[:usable])
+                    if sys.byteorder != "little":
+                        arr.byteswap()
+                    n = len(arr)
+                    soma_quadrados = sum(x * x for x in arr)
+                    rms = math.sqrt(soma_quadrados / n)
+                    tempo_centro = start_s + (sample_offset + n / 2) / self.sample_rate
+                    janelas_rms.append((tempo_centro, rms))
+                    sample_offset += n
+
+                if not chunk:
+                    break
+
+            rc = proc.wait(timeout=180)
+            if rc != 0:
+                logger.warning("FFmpeg retornou código %s ao extrair áudio de %s", rc, video)
+                if not janelas_rms:
+                    return []
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=2)
+            logger.warning("Tempo limite excedido na análise de áudio de %s", video)
+            return []
 
         if not janelas_rms:
             return []
