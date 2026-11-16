@@ -108,7 +108,7 @@ class LayoutEngine:
         target_h = config.target_height
 
         if mode == LayoutMode.SOLO or config.facecam_rect is None:
-            # Modo Solo 9:16
+            # Modo Solo (9:16 ou 16:9)
             if config.gameplay_rect:
                 gp = config.gameplay_rect.clamp(source_w, source_h)
                 return (
@@ -116,11 +116,15 @@ class LayoutEngine:
                     f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
                     f"crop={target_w}:{target_h}"
                 )
-            else:
+            if target_w > target_h:
                 return (
-                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-                    f"crop={target_w}:{target_h}"
+                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+                    f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2"
                 )
+            return (
+                f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={target_w}:{target_h}"
+            )
 
         # Modo Empilhado (Stacked: Facecam superior + Gameplay inferior)
         fc = config.facecam_rect.clamp(source_w, source_h)

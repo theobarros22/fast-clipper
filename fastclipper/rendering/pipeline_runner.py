@@ -99,9 +99,31 @@ class PipelineRunner:
         return self._cancel_event.is_set()
 
     def render_clip(self, params: Dict[str, Any], job_id: Optional[str] = None) -> JobExecutionResult:
-        """Executa a cadeia de renderização de um clipe 9:16 a partir de um vídeo fonte."""
+        """Executa a cadeia de renderização de um clipe (9:16, 16:9 ou ambos) a partir de um vídeo fonte."""
         job_id = job_id or f"clip_{uuid.uuid4().hex[:8]}"
         t0 = time.time()
+
+        aspect_ratio = str(params.get("aspect_ratio", "9:16")).strip().lower()
+        if aspect_ratio in ("both", "ambos"):
+            res_v = self.render_clip({**params, "aspect_ratio": "9:16"}, job_id=job_id)
+            if not res_v.success:
+                return res_v
+            res_h = self.render_clip(
+                {**params, "aspect_ratio": "16:9", "output_filename": f"{job_id}_16x9.mp4"},
+                job_id=f"{job_id}_16x9",
+            )
+            if not res_h.success:
+                return res_h
+            extra = list(res_v.metadata.get("extra_outputs", []))
+            if res_h.output_video_path:
+                extra.append({
+                    "aspect_ratio": "16:9",
+                    "filename": Path(res_h.output_video_path).name,
+                    "output_path": res_h.output_video_path,
+                })
+            res_v.metadata["extra_outputs"] = extra
+            res_v.metadata["aspect_ratio"] = "both"
+            return res_v
 
         video_path_str = params.get("video_path")
         if not video_path_str:
@@ -133,17 +155,19 @@ class PipelineRunner:
                 metadata={"precheck": precheck_res.to_dict()},
             )
 
-        # 2. Configuração de Layout (Solo vs Empilhado)
+        # 2. Configuração de Layout (9:16 Solo/Empilhado ou 16:9 Horizontal)
+        is_16x9 = aspect_ratio == "16:9"
+        target_w, target_h = (1920, 1080) if is_16x9 else (1080, 1920)
         layout_mode_str = params.get("layout_mode", params.get("layout", "solo")).lower()
-        mode = LayoutMode.STACKED if layout_mode_str == "stacked" else LayoutMode.SOLO
+        mode = LayoutMode.SOLO if is_16x9 else (LayoutMode.STACKED if layout_mode_str == "stacked" else LayoutMode.SOLO)
 
         fc_rect = None
-        if "facecam_rect" in params and params["facecam_rect"]:
+        if not is_16x9 and "facecam_rect" in params and params["facecam_rect"]:
             r = params["facecam_rect"]
             fc_rect = Rectangle(int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"]))
 
         gp_rect = None
-        if "gameplay_rect" in params and params["gameplay_rect"]:
+        if not is_16x9 and "gameplay_rect" in params and params["gameplay_rect"]:
             r = params["gameplay_rect"]
             gp_rect = Rectangle(int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"]))
 
@@ -153,6 +177,8 @@ class PipelineRunner:
             facecam_rect=fc_rect,
             gameplay_rect=gp_rect,
             stacked_facecam_height=int(params.get("stacked_facecam_height", 720)),
+            target_width=target_w,
+            target_height=target_h,
         )
 
         # 3. Geração de Legendas (.ass) se houver palavras/cues
@@ -174,13 +200,16 @@ class PipelineRunner:
                 except ValueError:
                     preset = CaptionPreset.VIRAL_BOUNCE
 
-                ass_content = self.subtitle_engine.generate_ass(cues, preset=preset)
+                ass_content = self.subtitle_engine.generate_ass(
+                    cues, preset=preset, play_res_x=target_w, play_res_y=target_h
+                )
                 ass_path = self.output_dir / f"{job_id}_subs.ass"
                 ass_path.write_text(ass_content, encoding="utf-8")
 
-        # 4. Renderização com Enquadramento 9:16 e Queima de Legenda Opcional
+        # 4. Renderização e Queima de Legenda Opcional
         burn_subtitles = params.get("burn_subtitles", True) if ass_path else False
-        output_filename = params.get("output_filename") or f"{job_id}_9x16.mp4"
+        suffix = "_16x9.mp4" if is_16x9 else "_9x16.mp4"
+        output_filename = params.get("output_filename") or f"{job_id}{suffix}"
         caminho_saida = self.output_dir / output_filename
 
         render_ok = self._render_ffmpeg_direct(
@@ -203,8 +232,8 @@ class PipelineRunner:
         validacao = self.render_adapter.validate_media_ffprobe(
             caminho_arquivo=caminho_saida,
             duracao_esperada=duracao_planejada,
-            largura_esperada=1080,
-            altura_esperada=1920,
+            largura_esperada=target_w,
+            altura_esperada=target_h,
             require_audio=params.get("require_audio", True),
         )
 

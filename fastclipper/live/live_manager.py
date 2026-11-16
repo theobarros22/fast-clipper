@@ -424,6 +424,7 @@ class LiveClipSession:
                 "facecam_rect": opts.get("facecam_rect"),
                 "gameplay_rect": opts.get("gameplay_rect"),
                 "stacked_facecam_height": int(opts.get("stacked_facecam_height", 720)),
+                "aspect_ratio": opts.get("aspect_ratio", "9:16"),
                 "subtitle_preset": opts.get("subtitle_preset", "viral_clean"),
                 "burn_subtitles": bool(opts.get("burn_subtitles", False)),
             }
@@ -438,8 +439,21 @@ class LiveClipSession:
                     "download_url": f"/api/v1/studio/video/{fname}",
                     "created_at": time.time(),
                 }
+                extra_entries = []
+                for ex in (result.metadata or {}).get("extra_outputs", []):
+                    ex_name = ex.get("filename")
+                    if ex_name:
+                        extra_entries.append({
+                            "filename": ex_name,
+                            "titulo": f"{titulo} ({ex.get('aspect_ratio', '16:9')})",
+                            "inicio_s": round(inicio_s, 2),
+                            "fim_s": round(fim_s, 2),
+                            "download_url": f"/api/v1/studio/video/{ex_name}",
+                            "created_at": time.time(),
+                        })
                 with self._lock:
                     self.clips_generated.append(entry)
+                    self.clips_generated.extend(extra_entries)
                 if candidate_id and candidate_id in self.marker._candidates:
                     self.marker._candidates[candidate_id].status = CandidateStatus.CONCLUIDO
                 return entry

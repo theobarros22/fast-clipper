@@ -58,6 +58,9 @@ def render_vertical_ffmpeg(
 
     cmd = [ffmpeg_bin, "-loglevel", "error", "-y"] + input_args
 
+    target_w = layout_config.target_width if layout_config is not None else 1080
+    target_h = layout_config.target_height if layout_config is not None else 1920
+
     if layout_config is not None:
         filtro_base = layout_engine.build_filter_graph(layout_config, source_w, source_h)
         is_stacked = (
@@ -65,7 +68,7 @@ def render_vertical_ffmpeg(
             and layout_config.facecam_rect is not None
         )
     else:
-        filtro_base = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+        filtro_base = f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,crop={target_w}:{target_h}"
         is_stacked = False
 
     cwd: Optional[str] = None
@@ -86,7 +89,7 @@ def render_vertical_ffmpeg(
             cmd.extend(["-vf", filtro_base])
 
     enc = encoder_manager.get_encoder()
-    enc_args = encoder_manager.get_encoder_args(enc, width=1080, height=1920)
+    enc_args = encoder_manager.get_encoder_args(enc, width=target_w, height=target_h)
     resolved_out = output_path.resolve()
     full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
     rc, stderr, cancelled = _run_ffmpeg_cancellable(
@@ -98,7 +101,7 @@ def render_vertical_ffmpeg(
     if rc != 0 and enc != SOFTWARE_ENCODER:
         logger.warning("Hardware encoder '%s' falhou. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
         encoder_manager.mark_broken(enc)
-        sw_args = encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
+        sw_args = encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=target_w, height=target_h)
         full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
         rc, stderr, cancelled = _run_ffmpeg_cancellable(
             full_cmd, cwd=cwd, timeout_s=timeout_s, cancel_event=cancel_event, output_path=resolved_out

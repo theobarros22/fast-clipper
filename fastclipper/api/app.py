@@ -210,6 +210,7 @@ class StudioRenderRequest(BaseModel):
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
     stacked_facecam_height: int = 720
+    aspect_ratio: str = "9:16"
     subtitle_text: Optional[str] = None
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
@@ -241,6 +242,7 @@ class LiveStartRequest(BaseModel):
     facecam_rect: Optional[Dict[str, Any]] = None
     gameplay_rect: Optional[Dict[str, Any]] = None
     stacked_facecam_height: int = 720
+    aspect_ratio: str = "9:16"
     burn_subtitles: bool = False
     subtitle_preset: str = "viral_clean"
 
@@ -253,6 +255,7 @@ class LiveMarkRequest(BaseModel):
     facecam_rect: Optional[Dict[str, Any]] = None
     gameplay_rect: Optional[Dict[str, Any]] = None
     stacked_facecam_height: Optional[int] = None
+    aspect_ratio: Optional[str] = None
     burn_subtitles: Optional[bool] = None
     subtitle_preset: Optional[str] = None
 
@@ -308,6 +311,7 @@ class BatchRenderRequest(BaseModel):
     facecam_rect: Optional[Dict[str, int]] = None
     gameplay_rect: Optional[Dict[str, int]] = None
     stacked_facecam_height: int = 720
+    aspect_ratio: str = "9:16"
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
@@ -811,6 +815,7 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "facecam_rect": req.facecam_rect,
             "gameplay_rect": req.gameplay_rect,
             "stacked_facecam_height": req.stacked_facecam_height,
+            "aspect_ratio": req.aspect_ratio,
             "subtitles": req.words,
             "subtitles_are_absolute": req.subtitles_are_absolute,
             "subtitle_preset": req.subtitle_preset,
@@ -845,6 +850,7 @@ def studio_live_start(req: LiveStartRequest):
             "facecam_rect": req.facecam_rect,
             "gameplay_rect": req.gameplay_rect,
             "stacked_facecam_height": req.stacked_facecam_height,
+            "aspect_ratio": req.aspect_ratio,
             "burn_subtitles": req.burn_subtitles,
             "subtitle_preset": req.subtitle_preset,
         }
@@ -881,6 +887,8 @@ def studio_live_mark(req: LiveMarkRequest):
         render_opts["gameplay_rect"] = req.gameplay_rect
     if req.stacked_facecam_height is not None:
         render_opts["stacked_facecam_height"] = req.stacked_facecam_height
+    if req.aspect_ratio is not None:
+        render_opts["aspect_ratio"] = req.aspect_ratio
     if req.burn_subtitles is not None:
         render_opts["burn_subtitles"] = req.burn_subtitles
     if req.subtitle_preset is not None:
@@ -974,6 +982,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "facecam_rect": req.facecam_rect,
         "gameplay_rect": req.gameplay_rect,
         "stacked_facecam_height": req.stacked_facecam_height,
+        "aspect_ratio": req.aspect_ratio,
         "subtitles": subtitles_payload,
         "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,
@@ -985,12 +994,21 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         raise HTTPException(status_code=400, detail=result.error or "Falha na renderização do clipe")
 
     filename = Path(result.output_video_path).name if result.output_video_path else None
+    extra_outputs = [
+        {
+            **ex,
+            "download_url": f"/api/v1/studio/video/{ex['filename']}",
+        }
+        for ex in (result.metadata or {}).get("extra_outputs", [])
+        if ex.get("filename")
+    ]
     return {
         "success": True,
         "filename": filename,
         "output_path": result.output_video_path,
         "duration": result.duration,
         "download_url": f"/api/v1/studio/video/{filename}" if filename else None,
+        "extra_outputs": extra_outputs,
         "metadata": result.metadata,
     }
 

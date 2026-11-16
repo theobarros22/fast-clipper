@@ -496,7 +496,15 @@
 
             <section class="panel">
                 <div class="panel-title">
-                    <span>2. Enquadramento vertical (9:16)</span>
+                    <span>2. Enquadramento e formato</span>
+                </div>
+                <div class="field" style="margin-bottom:12px;">
+                    <label class="label" for="aspect_ratio">Formato de saída</label>
+                    <select id="aspect_ratio" class="select-box">
+                        <option value="9:16" selected>9:16 (Vertical — Shorts / Reels / TikTok)</option>
+                        <option value="16:9">16:9 (Horizontal — X / YouTube)</option>
+                        <option value="both">Ambos (salvar 9:16 + 16:9)</option>
+                    </select>
                 </div>
                 <div class="layout-options">
                     <button type="button" id="card-solo" class="layout-card" aria-pressed="true">
@@ -961,14 +969,17 @@ http://127.0.0.1:8000/docs</div>
         let lastLiveClipsCount = 0;
 
         function currentLiveRenderOpts() {
-            const stackedH = document.getElementById('stacked_facecam_height');
+            const hFc = document.getElementById('h-facecam');
+            const subPreset = document.getElementById('subtitle_preset');
+            const ar = document.getElementById('aspect_ratio');
             return {
                 layout: currentLayout,
-                facecam_rect: currentLayout === 'stacked' ? getRectFromInputs('fc') : null,
-                gameplay_rect: currentLayout === 'stacked' ? getRectFromInputs('gp') : null,
-                stacked_facecam_height: stackedH ? parseInt(stackedH.value, 10) || 720 : 720,
+                facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
+                gameplay_rect: null,
+                stacked_facecam_height: hFc ? parseInt(hFc.value, 10) || 720 : 720,
+                aspect_ratio: ar ? ar.value : '9:16',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
-                subtitle_preset: currentSubPreset,
+                subtitle_preset: subPreset ? subPreset.value : 'viral_bounce',
             };
         }
 
@@ -993,7 +1004,7 @@ http://127.0.0.1:8000/docs</div>
 
             if (st && (st.clips_generated || 0) > lastLiveClipsCount) {
                 lastLiveClipsCount = st.clips_generated;
-                loadClips();
+                loadClipsList();
             }
         }
 
@@ -1315,6 +1326,7 @@ http://127.0.0.1:8000/docs</div>
                         layout: currentLayout,
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
                         stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        aspect_ratio: document.getElementById('aspect_ratio').value,
                         words: transcribedWords,
                         subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
@@ -1391,6 +1403,7 @@ http://127.0.0.1:8000/docs</div>
                         layout: currentLayout,
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
                         stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        aspect_ratio: document.getElementById('aspect_ratio').value,
                         subtitle_text: useRealWords ? null : document.getElementById('subtitle_text').value.trim(),
                         words: useRealWords ? transcribedWords : null,
                         subtitles_are_absolute: useRealWords,
@@ -1413,6 +1426,12 @@ http://127.0.0.1:8000/docs</div>
         function playClipInMockup(url, filename) {
             const player = document.getElementById('player-preview');
             const img = document.getElementById('layout-preview-img');
+            const mockup = document.querySelector('.phone-mockup');
+            if (mockup) {
+                const is16x9 = (filename || '').includes('_16x9');
+                mockup.style.aspectRatio = is16x9 ? '16 / 9' : '9 / 16';
+                mockup.style.maxWidth = is16x9 ? '100%' : '268px';
+            }
             const placeholder = document.getElementById('video-placeholder');
             const dlBtn = document.getElementById('btn-download-clip');
             const expBar = document.getElementById('export-quick-bar');
