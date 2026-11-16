@@ -221,6 +221,7 @@ class StudioRenderRequest(BaseModel):
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
     normalize_audio: bool = False
+    watermark_text: Optional[str] = None
 
 
 class ImportSourceRequest(BaseModel):
@@ -254,6 +255,7 @@ class LiveStartRequest(BaseModel):
     subtitle_preset: str = "viral_clean"
     language: str = "pt"
     normalize_audio: bool = False
+    watermark_text: Optional[str] = None
 
 
 class LiveMarkRequest(BaseModel):
@@ -269,6 +271,7 @@ class LiveMarkRequest(BaseModel):
     subtitle_preset: Optional[str] = None
     language: Optional[str] = None
     normalize_audio: Optional[bool] = None
+    watermark_text: Optional[str] = None
 
 
 class TranscribeRequest(BaseModel):
@@ -328,6 +331,7 @@ class BatchRenderRequest(BaseModel):
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
     normalize_audio: bool = False
+    watermark_text: Optional[str] = None
 
 
 class GenerateCopyRequest(BaseModel):
@@ -833,6 +837,7 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "subtitle_preset": req.subtitle_preset,
             "burn_subtitles": req.burn_subtitles,
             "normalize_audio": req.normalize_audio,
+            "watermark_text": req.watermark_text,
         }
         job = durable_queue.enqueue(
             org_id="org_default",
@@ -868,6 +873,7 @@ def studio_live_start(req: LiveStartRequest):
             "subtitle_preset": req.subtitle_preset,
             "language": req.language,
             "normalize_audio": req.normalize_audio,
+            "watermark_text": req.watermark_text,
         }
         session = live_manager.start_session(
             url=req.url,
@@ -914,6 +920,8 @@ def studio_live_mark(req: LiveMarkRequest):
         render_opts["language"] = req.language
     if req.normalize_audio is not None:
         render_opts["normalize_audio"] = req.normalize_audio
+    if req.watermark_text is not None:
+        render_opts["watermark_text"] = req.watermark_text
 
     try:
         return live_manager.mark_clip(
@@ -1038,6 +1046,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "subtitle_preset": req.subtitle_preset,
         "burn_subtitles": req.burn_subtitles,
         "normalize_audio": req.normalize_audio,
+        "watermark_text": req.watermark_text,
     }
 
     result = pipeline_runner.render_clip(params)

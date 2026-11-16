@@ -220,6 +220,7 @@ class PipelineRunner:
             layout_config=layout_config,
             ass_path=ass_path if burn_subtitles else None,
             normalize_audio=bool(params.get("normalize_audio", False)),
+            watermark_text=params.get("watermark_text"),
         )
 
         if not render_ok or not caminho_saida.exists():
@@ -362,6 +363,7 @@ class PipelineRunner:
         layout_config: ChannelLayoutConfig,
         ass_path: Optional[Path] = None,
         normalize_audio: bool = False,
+        watermark_text: Optional[str] = None,
     ) -> bool:
         """Renderiza via núcleo unificado render_core com suporte a layout 9:16 e legenda ASS."""
         return render_vertical_ffmpeg(
@@ -376,6 +378,7 @@ class PipelineRunner:
             ass_path=ass_path,
             cancel_event=self._cancel_event,
             normalize_audio=normalize_audio,
+            watermark_text=watermark_text,
         )
 
     def _parse_subtitles_data(

@@ -512,13 +512,19 @@
                 <div class="panel-title">
                     <span>2. Enquadramento e formato</span>
                 </div>
-                <div class="field" style="margin-bottom:12px;">
-                    <label class="label" for="aspect_ratio">Formato de saída</label>
-                    <select id="aspect_ratio" class="select-box">
-                        <option value="9:16" selected>9:16 (Vertical — Shorts / Reels / TikTok)</option>
-                        <option value="16:9">16:9 (Horizontal — X / YouTube)</option>
-                        <option value="both">Ambos (salvar 9:16 + 16:9)</option>
-                    </select>
+                <div class="row-2" style="margin-bottom:12px;">
+                    <div class="field" style="margin-bottom:0;">
+                        <label class="label" for="aspect_ratio">Formato de saída</label>
+                        <select id="aspect_ratio" class="select-box">
+                            <option value="9:16" selected>9:16 (Vertical — Shorts / Reels / TikTok)</option>
+                            <option value="16:9">16:9 (Horizontal — X / YouTube)</option>
+                            <option value="both">Ambos (salvar 9:16 + 16:9)</option>
+                        </select>
+                    </div>
+                    <div class="field" style="margin-bottom:0;">
+                        <label class="label" for="watermark_text">Marca d'água (@canal, opcional)</label>
+                        <input type="text" id="watermark_text" class="input-text" maxlength="40" placeholder="Ex: @meucanal">
+                    </div>
                 </div>
                 <div class="layout-options">
                     <button type="button" id="card-solo" class="layout-card" aria-pressed="true">
@@ -1013,6 +1019,7 @@ http://127.0.0.1:8000/docs</div>
                 aspect_ratio: ar ? ar.value : '9:16',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
                 normalize_audio: document.getElementById('normalize_audio').checked,
+                watermark_text: (document.getElementById('watermark_text').value || '').trim() || null,
                 subtitle_preset: subPreset ? subPreset.value : 'viral_bounce',
                 language: langEl ? langEl.value : 'pt',
             };
@@ -1395,6 +1402,7 @@ http://127.0.0.1:8000/docs</div>
                         subtitle_preset: document.getElementById('subtitle_preset').value,
                         burn_subtitles: document.getElementById('burn_subtitles').checked,
                         normalize_audio: document.getElementById('normalize_audio').checked,
+                        watermark_text: (document.getElementById('watermark_text').value || '').trim() || null,
                     }),
                 });
                 if (data.job_ids) pollBatchJobs(data.job_ids);
@@ -1474,6 +1482,7 @@ http://127.0.0.1:8000/docs</div>
                         subtitle_preset: document.getElementById('subtitle_preset').value,
                         burn_subtitles: document.getElementById('burn_subtitles').checked,
                         normalize_audio: document.getElementById('normalize_audio').checked,
+                        watermark_text: (document.getElementById('watermark_text').value || '').trim() || null,
                     }),
                 });
                 setStatus(`Clipe pronto (${data.duration.toFixed(1)}s): ${data.filename}`, 'idle');

@@ -36,6 +36,7 @@ def render_vertical_ffmpeg(
     timeout_s: float = 600.0,
     cancel_event: Optional[threading.Event] = None,
     normalize_audio: bool = False,
+    watermark_text: Optional[str] = None,
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -71,6 +72,33 @@ def render_vertical_ffmpeg(
     else:
         filtro_base = f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,crop={target_w}:{target_h}"
         is_stacked = False
+
+    wm_clean = (watermark_text or "").strip()[:40]
+    if wm_clean:
+        safe_wm = (
+            wm_clean.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\\'")
+            .replace("%", "\\%")
+        )
+        font_opt = ""
+        for fp in (
+            "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ):
+            if Path(fp).is_file():
+                escaped_fp = fp.replace(":", "\\:")
+                font_opt = f"fontfile='{escaped_fp}':"
+                break
+        wm_filter = (
+            f"drawtext={font_opt}text='{safe_wm}':fontsize=28:fontcolor=white@0.75:"
+            "shadowcolor=black@0.75:shadowx=2:shadowy=2:x=w-tw-28:y=28"
+        )
+        if is_stacked:
+            filtro_base = filtro_base.replace("[outv]", "[pre_wm]") + f"; [pre_wm] {wm_filter} [outv]"
+        else:
+            filtro_base = f"{filtro_base},{wm_filter}"
 
     cwd: Optional[str] = None
     if ass_path is not None and ass_path.is_file():

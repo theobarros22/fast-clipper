@@ -471,6 +471,7 @@ class LiveClipSession:
                 "subtitle_preset": opts.get("subtitle_preset", "viral_clean"),
                 "burn_subtitles": burn_subs and bool(subtitles_words),
                 "normalize_audio": bool(opts.get("normalize_audio", False)),
+                "watermark_text": opts.get("watermark_text"),
             }
             result = self.pipeline_runner.render_clip(params)
             if result.success and result.output_video_path:

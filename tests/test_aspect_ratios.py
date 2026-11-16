@@ -102,3 +102,21 @@ def test_render_with_normalize_audio(tmp_path):
     })
     assert res.success, res.error
     assert Path(res.output_video_path).is_file()
+
+
+def test_render_with_watermark_text(tmp_path):
+    if not FIXTURE_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    runner = PipelineRunner(queue=DurableTaskQueue(), output_dir=tmp_path)
+    res = runner.render_clip({
+        "video_path": str(FIXTURE_VIDEO),
+        "inicio_s": 0.0,
+        "fim_s": 2.0,
+        "layout": "solo",
+        "aspect_ratio": "9:16",
+        "burn_subtitles": False,
+        "watermark_text": "@FastClipper:Live",
+    })
+    assert res.success, res.error
+    assert Path(res.output_video_path).is_file()
