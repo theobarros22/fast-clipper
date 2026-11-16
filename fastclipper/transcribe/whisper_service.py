@@ -6,6 +6,8 @@ e cache persistente em SQLite indexado pelo SHA-256 do arquivo de mídia.
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -13,6 +15,26 @@ from fastclipper.ingest.vod_ingest import compute_file_sha256
 from fastclipper.storage.sqlite_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
+_DLL_DIR_HANDLES: List[Any] = []
+
+
+def _ensure_nvidia_dll_paths() -> None:
+    """Registra diretórios bin da NVIDIA (cublas/cudnn) no Windows para o ctranslate2."""
+    if sys.platform != "win32" or _DLL_DIR_HANDLES:
+        return
+    nvidia_root = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    if not nvidia_root.is_dir():
+        return
+    extra_bins = [str(p) for p in nvidia_root.glob("*/bin") if p.is_dir()]
+    if not extra_bins:
+        return
+    os.environ["PATH"] = os.pathsep.join(extra_bins) + os.pathsep + os.environ.get("PATH", "")
+    if hasattr(os, "add_dll_directory"):
+        for b in extra_bins:
+            try:
+                _DLL_DIR_HANDLES.append(os.add_dll_directory(b))
+            except OSError:
+                pass
 
 
 class WhisperTranscriptionService:
@@ -41,6 +63,7 @@ class WhisperTranscriptionService:
         return "cpu", "int8"
 
     def _get_model(self, model_name: str, device: str, compute_type: str) -> Any:
+        _ensure_nvidia_dll_paths()
         key = (model_name, device, compute_type)
         if key not in self._loaded_models:
             from faster_whisper import WhisperModel
@@ -82,18 +105,34 @@ class WhisperTranscriptionService:
             progress_callback(5.0, f"Carregando modelo {chosen_model} ({device}/{compute_type})")
 
         model = self._get_model(chosen_model, device, compute_type)
-        segments, info = model.transcribe(
-            str(path),
-            language=lang,
-            word_timestamps=True,
-            vad_filter=True,
-        )
+        try:
+            segments, info = model.transcribe(
+                str(path),
+                language=lang,
+                word_timestamps=True,
+                vad_filter=True,
+            )
+            seg_list = list(segments)
+        except Exception as exc:
+            if device == "cuda":
+                logger.warning("Whisper CUDA falhou (%s); recorrendo ao CPU int8.", exc)
+                device, compute_type = "cpu", "int8"
+                model = self._get_model(chosen_model, device, compute_type)
+                segments, info = model.transcribe(
+                    str(path),
+                    language=lang,
+                    word_timestamps=True,
+                    vad_filter=True,
+                )
+                seg_list = list(segments)
+            else:
+                raise
 
         total_dur = float(getattr(info, "duration", 0.0) or 0.0)
         words: List[Dict[str, Any]] = []
         texts: List[str] = []
 
-        for seg in segments:
+        for seg in seg_list:
             seg_text = (seg.text or "").strip()
             if seg_text:
                 texts.append(seg_text)
