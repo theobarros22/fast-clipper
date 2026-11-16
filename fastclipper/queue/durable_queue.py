@@ -198,3 +198,36 @@ class DurableTaskQueue:
     def get_job(self, job_id: str) -> Optional[QueueJob]:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def lease_job(self, job_id: str, worker_id: str, lease_duration_s: float = 60.0) -> Optional[QueueJob]:
+        now = time.time()
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return None
+            if job.status != JobStatus.CRIADO and not (
+                job.status in (JobStatus.ANALISANDO, JobStatus.RENDERIZANDO)
+                and job.leased_until is not None
+                and job.leased_until < now
+                and job.attempts < job.max_attempts
+            ):
+                return None
+            job.worker_id = worker_id
+            job.leased_until = now + lease_duration_s
+            job.attempts += 1
+            job.status = JobStatus.RENDERIZANDO if "render" in job.job_type else JobStatus.ANALISANDO
+            job.step_description = f"Assumido pelo worker {worker_id}"
+            job.updated_at = now
+            return job
+
+    def cancel_job(self, job_id: str, reason: str = "Cancelado pelo usuário") -> Optional[QueueJob]:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return None
+            job.status = JobStatus.CANCELADO
+            job.step_description = reason
+            job.error = reason
+            job.leased_until = None
+            job.updated_at = time.time()
+            return job

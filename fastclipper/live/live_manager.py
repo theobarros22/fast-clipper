@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.parse
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -171,9 +172,15 @@ class LiveClipSession:
         self.ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         self.ffprobe_bin = shutil.which("ffprobe") or "ffprobe"
         self._proc: Optional[subprocess.Popen] = None
+        self._ffmpeg_log_file = None
+        self._ffmpeg_log_path = self.session_dir / "ffmpeg_live.log"
         self._monitor_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        self._render_semaphore = threading.Semaphore(2)
+        self._active_renders = 0
+        self._kw_busy = False
+        self._recent_db_history: deque[float] = deque(maxlen=18)
 
         self.running = False
         self.started_at = time.time()
@@ -211,10 +218,12 @@ class LiveClipSession:
         ])
 
         self._stop_event.clear()
+        self.last_error = None
+        self._ffmpeg_log_file = open(self._ffmpeg_log_path, "w", encoding="utf-8", errors="replace")
         self._proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=self._ffmpeg_log_file,
             text=True,
         )
         self.running = True
@@ -241,6 +250,12 @@ class LiveClipSession:
                     pass
         if self._monitor_thread and self._monitor_thread.is_alive():
             self._monitor_thread.join(timeout=3)
+        if self._ffmpeg_log_file is not None:
+            try:
+                self._ffmpeg_log_file.close()
+            except Exception:
+                pass
+            self._ffmpeg_log_file = None
         self._scan_new_segments(include_last=True)
         self.running = False
 
@@ -300,10 +315,16 @@ class LiveClipSession:
         return novos
 
     def _evaluate_auto_clip_trigger(self, seg_path: Path) -> Optional[str]:
-        """Avalia pico de áudio e, se configurado, palavras-chave transcritas no segmento."""
+        """Avalia pico de áudio relativo à média móvel e, em thread separada, palavras-chave."""
         max_db = _measure_segment_volume_db(self.ffmpeg_bin, seg_path)
-        if max_db is not None and max_db > self.auto_clip_threshold_db:
-            return f"Auto Pico ({max_db:.1f} dB)"
+        if max_db is not None:
+            is_spike = max_db > self.auto_clip_threshold_db
+            if len(self._recent_db_history) >= 3:
+                moving_avg = sum(self._recent_db_history) / len(self._recent_db_history)
+                is_spike = is_spike and (max_db >= moving_avg + 3.0)
+            self._recent_db_history.append(max_db)
+            if is_spike:
+                return f"Auto Pico ({max_db:.1f} dB)"
 
         if self.auto_clip_keywords and self.transcribe_fn is not None:
             try:
@@ -319,6 +340,16 @@ class LiveClipSession:
             except Exception as exc:
                 logger.warning("Erro ao avaliar palavras-chave no segmento ao vivo: %s", exc)
         return None
+
+    def _async_auto_clip_check(self, seg_path: Path, now_t: float) -> None:
+        try:
+            triggered_title = self._evaluate_auto_clip_trigger(seg_path)
+            if triggered_title and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
+                self._last_auto_clip_s = now_t
+                ini = max(0.0, now_t - self.auto_clip_duration_s)
+                self._render_window_worker(ini, now_t, triggered_title, self.default_render_opts, None)
+        finally:
+            self._kw_busy = False
 
     def _monitor_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -336,18 +367,15 @@ class LiveClipSession:
                         daemon=True,
                     ).start()
 
-                # Auto-clipping por pico de áudio ou palavras-chave nos novos segmentos
-                if self.auto_clip and novos and now_t >= 4.0 and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
+                # Auto-clipping em worker separado para nunca atrasar o loop de monitoramento (N11)
+                if self.auto_clip and novos and now_t >= 4.0 and not self._kw_busy and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
                     last_seg_file = self.segments_dir / f"seg_{novos[-1]:05d}.ts"
-                    triggered_title = self._evaluate_auto_clip_trigger(last_seg_file)
-                    if triggered_title:
-                        self._last_auto_clip_s = now_t
-                        ini = max(0.0, now_t - self.auto_clip_duration_s)
-                        threading.Thread(
-                            target=self._render_window_worker,
-                            args=(ini, now_t, triggered_title, self.default_render_opts, None),
-                            daemon=True,
-                        ).start()
+                    self._kw_busy = True
+                    threading.Thread(
+                        target=self._async_auto_clip_check,
+                        args=(last_seg_file, now_t),
+                        daemon=True,
+                    ).start()
 
                 self.buffer.prune_expired(now_t)
 
@@ -364,7 +392,10 @@ class LiveClipSession:
                     if self._proc.returncode not in (0, None) and not self._stop_event.is_set():
                         stderr_txt = ""
                         try:
-                            stderr_txt = (self._proc.stderr.read() or "").strip()
+                            if self._ffmpeg_log_file is not None:
+                                self._ffmpeg_log_file.flush()
+                            if self._ffmpeg_log_path.is_file():
+                                stderr_txt = self._ffmpeg_log_path.read_text(encoding="utf-8", errors="replace")[-1000:].strip()
                         except Exception:
                             pass
                         self.last_error = stderr_txt or f"FFmpeg encerrou com código {self._proc.returncode}"
@@ -440,6 +471,9 @@ class LiveClipSession:
         candidate_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         window_mp4 = self.windows_dir / f"win_{uuid.uuid4().hex[:8]}.mp4"
+        with self._lock:
+            self._active_renders += 1
+        self._render_semaphore.acquire()
         try:
             self.extract_window(inicio_s, fim_s, window_mp4)
             dur = max(1.0, fim_s - inicio_s)
@@ -500,6 +534,7 @@ class LiveClipSession:
                 with self._lock:
                     self.clips_generated.append(entry)
                     self.clips_generated.extend(extra_entries)
+                    self.last_error = None
                 if candidate_id and candidate_id in self.marker._candidates:
                     self.marker._candidates[candidate_id].status = CandidateStatus.CONCLUIDO
                 return entry
@@ -510,6 +545,9 @@ class LiveClipSession:
             self.last_error = str(exc)
             return {"error": self.last_error}
         finally:
+            self._render_semaphore.release()
+            with self._lock:
+                self._active_renders = max(0, self._active_renders - 1)
             try:
                 window_mp4.unlink(missing_ok=True)
             except Exception:
@@ -683,7 +721,7 @@ class LiveManager:
 
         active_id = (
             self.current_session.session_id
-            if self.current_session and self.current_session.running
+            if self.current_session and (self.current_session.running or self.current_session._active_renders > 0)
             else None
         )
         removed = 0

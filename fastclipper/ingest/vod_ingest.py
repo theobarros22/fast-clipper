@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -50,6 +51,12 @@ class VodIngestor:
             raise ValueError("Referência de autorização (authorization_ref) é obrigatória para qualquer fonte.")
         return ref
 
+    def _validate_project_id(self, project_id: str) -> str:
+        pid = (project_id or "").strip()
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", pid):
+            raise ValueError("project_id inválido: use apenas letras, números, '-' ou '_' (1 a 64 caracteres).")
+        return pid
+
     def import_local_file(
         self,
         file_path: str | Path,
@@ -60,6 +67,7 @@ class VodIngestor:
     ) -> Dict[str, Any]:
         """Valida e registra um arquivo de vídeo local no SQLite."""
         ref = self._validate_auth_ref(authorization_ref)
+        project_id = self._validate_project_id(project_id)
         src = Path(file_path).resolve()
         if not src.is_file():
             raise FileNotFoundError(f"Arquivo de vídeo não encontrado: {src}")
@@ -99,7 +107,10 @@ class VodIngestor:
     ) -> Dict[str, Any]:
         """Baixa um VOD autorizado via yt-dlp com proteção SSRF e salva no projeto."""
         ref = self._validate_auth_ref(authorization_ref)
-        dest_dir = self.projects_root / project_id / "source"
+        project_id = self._validate_project_id(project_id)
+        dest_dir = (self.projects_root / project_id / "source").resolve()
+        if not dest_dir.is_relative_to(self.projects_root.resolve()):
+            raise ValueError("Caminho de projeto fora da pasta permitida.")
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         # Reaproveita o SSRF guard já validado

@@ -57,23 +57,25 @@ class WhisperTranscriptionService:
         model_name: Optional[str] = None,
         force_retranscribe: bool = False,
         progress_callback: Optional[Callable[[float, str], None]] = None,
+        save_to_cache: bool = True,
     ) -> Dict[str, Any]:
         """Transcreve o áudio com timestamps por palavra, usando cache em SQLite se existir."""
         path = Path(media_path).resolve()
         if not path.is_file():
             raise FileNotFoundError(f"Arquivo de mídia não encontrado para transcrição: {path}")
 
+        chosen_model = model_name or self.model_name
+        lang = language if language is not None else self.default_language
         sha = file_sha256 or compute_file_sha256(path)
-        if self.store and not force_retranscribe:
-            cached = self.store.get_transcription(sha)
+        cache_key = f"{sha}:{lang or 'auto'}:{chosen_model}"
+
+        if self.store and save_to_cache and not force_retranscribe:
+            cached = self.store.get_transcription(cache_key)
             if cached:
                 if progress_callback:
                     progress_callback(100.0, "Transcrição carregada do cache SQLite")
                 cached["from_cache"] = True
                 return cached
-
-        chosen_model = model_name or self.model_name
-        lang = language if language is not None else self.default_language
         device, compute_type = self.select_device_and_compute()
 
         if progress_callback:
@@ -114,9 +116,9 @@ class WhisperTranscriptionService:
         detected_lang = str(getattr(info, "language", lang or "pt"))
         full_text = " ".join(texts).strip()
 
-        if self.store:
+        if self.store and save_to_cache:
             saved = self.store.save_transcription(
-                file_sha256=sha,
+                file_sha256=cache_key,
                 language=detected_lang,
                 model_name=chosen_model,
                 duration_s=total_dur,

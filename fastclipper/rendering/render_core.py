@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -152,33 +153,35 @@ def _run_ffmpeg_cancellable(
     cancel_event: Optional[threading.Event],
     output_path: Path,
 ) -> tuple[int, str, bool]:
-    """Executa FFmpeg com suporte a cancelamento ativo e timeout."""
-    proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    deadline = time.monotonic() + max(1.0, float(timeout_s))
+    """Executa FFmpeg com suporte a cancelamento ativo e timeout sem travar pipe de stderr."""
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8", errors="replace") as stderr_file:
+        proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.DEVNULL, stderr=stderr_file, text=True)
+        deadline = time.monotonic() + max(1.0, float(timeout_s))
 
-    while proc.poll() is None:
-        if cancel_event is not None and cancel_event.is_set():
-            proc.terminate()
-            try:
-                proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
+        while proc.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2.0)
+                if output_path.exists():
+                    try:
+                        output_path.unlink()
+                    except OSError:
+                        pass
+                logger.info("Renderização cancelada pelo usuário; processo FFmpeg encerrado.")
+                return -1, "Cancelado pelo usuário.", True
+
+            if time.monotonic() > deadline:
                 proc.kill()
                 proc.wait(timeout=2.0)
-            if output_path.exists():
-                try:
-                    output_path.unlink()
-                except OSError:
-                    pass
-            logger.info("Renderização cancelada pelo usuário; processo FFmpeg encerrado.")
-            return -1, "Cancelado pelo usuário.", True
+                logger.error("FFmpeg excedeu o tempo limite de %.0fs.", timeout_s)
+                return -1, "Timeout na execução do FFmpeg.", False
 
-        if time.monotonic() > deadline:
-            proc.kill()
-            proc.wait(timeout=2.0)
-            logger.error("FFmpeg excedeu o tempo limite de %.0fs.", timeout_s)
-            return -1, "Timeout na execução do FFmpeg.", False
+            time.sleep(0.15)
 
-        time.sleep(0.15)
-
-    _, stderr = proc.communicate()
-    return proc.returncode or 0, stderr or "", False
+        stderr_file.seek(0)
+        stderr = stderr_file.read()
+        return proc.returncode or 0, stderr or "", False

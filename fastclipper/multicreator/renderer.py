@@ -125,7 +125,7 @@ class ComparisonRenderer:
                     "-b:a", "128k",
                     str(trecho_path),
                 ]
-                res = subprocess.run(cmd, capture_output=True, text=True)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
                 if res.returncode != 0 or not trecho_path.is_file():
                     logger.error("Falha ao gerar trecho %s: %s", track.track_id, res.stderr)
                     return False
@@ -146,7 +146,7 @@ class ComparisonRenderer:
                 "-c", "copy",
                 str(output_path),
             ]
-            res_concat = subprocess.run(cmd_concat, capture_output=True, text=True)
+            res_concat = subprocess.run(cmd_concat, capture_output=True, text=True, timeout=300)
             return res_concat.returncode == 0
         finally:
             if temp_dir.exists():
@@ -210,7 +210,7 @@ class ComparisonRenderer:
                 "-b:a", "128k",
                 str(output_path),
             ]
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             if res.returncode != 0:
                 logger.error("Falha split vertical: %s", res.stderr)
                 return False
@@ -234,7 +234,7 @@ class ComparisonRenderer:
             "-of", "json",
             str(caminho_arquivo),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if res.returncode != 0:
             return {"valid": False, "errors": [f"FFprobe falhou: {res.stderr}"]}
 
@@ -255,7 +255,7 @@ class ComparisonRenderer:
 
         # Teste de decodificação completa
         decode_cmd = [self.ffmpeg_bin, "-v", "error", "-i", str(caminho_arquivo), "-f", "null", "-"]
-        res_decode = subprocess.run(decode_cmd, capture_output=True, text=True)
+        res_decode = subprocess.run(decode_cmd, capture_output=True, text=True, timeout=180)
         if res_decode.returncode != 0:
             erros.append(f"Decodificação falhou: {res_decode.stderr.strip()}")
 

@@ -81,7 +81,7 @@ class PackageExporter:
             "-q:v", "2",
             str(out_cover),
         ]
-        subprocess.run(cmd, capture_output=True, text=True)
+        subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         # 4. Metadados JSON e arquivo texto pronto para copiar e colar
         hashtags_str = " ".join(hashtags)

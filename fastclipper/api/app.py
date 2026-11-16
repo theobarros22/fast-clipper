@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -108,21 +109,23 @@ async def local_security_guard(request: Request, call_next):
     return await call_next(request)
 
 # Serviços locais persistentes (SQLite WAL) e protótipos de apoio
-sqlite_store = SQLiteStore(ROOT / "data" / "fastclipper.db")
+DATA_DIR = Path(os.environ.get("FASTCLIPPER_DATA_DIR", str(ROOT / "data"))).resolve()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+sqlite_store = SQLiteStore(DATA_DIR / "fastclipper.db")
 collab_service = CollaborationService()
 durable_queue = SQLiteTaskQueue(sqlite_store)
 encoder_manager = HardwareEncoderManager()
 social_vault = OAuthTokenVault()
 prechecker = MediaPrechecker()
-vod_ingestor = VodIngestor(store=sqlite_store, projects_root=ROOT / "data" / "projects")
+vod_ingestor = VodIngestor(store=sqlite_store, projects_root=DATA_DIR / "projects")
 whisper_service = WhisperTranscriptionService(store=sqlite_store, model_name="small")
-pipeline_runner = PipelineRunner(queue=durable_queue, output_dir=ROOT / "data" / "output_clips")
+pipeline_runner = PipelineRunner(queue=durable_queue, output_dir=DATA_DIR / "output_clips")
 live_manager = LiveManager(
-    projects_root=ROOT / "data" / "projects",
+    projects_root=DATA_DIR / "projects",
     pipeline_runner=pipeline_runner,
-    transcribe_fn=lambda path, lang: whisper_service.transcribe(media_path=path, language=lang),
+    transcribe_fn=lambda path, lang: whisper_service.transcribe(media_path=path, language=lang, save_to_cache=False),
 )
-package_exporter = PackageExporter(exports_root=ROOT / "data" / "exports")
+package_exporter = PackageExporter(exports_root=DATA_DIR / "exports")
 
 # Registra organização e usuário padrão para demonstração imediata
 collab_service.register_organization(org_id="org_default", nome="Agência Alfa", slug="alfa")
@@ -655,6 +658,9 @@ async def studio_upload_source(
     project_id: str = Query("proj_default"),
 ):
     """Recebe upload binário em streaming do computador, valida e registra no projeto."""
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", (project_id or "").strip()):
+        raise HTTPException(status_code=400, detail="project_id inválido.")
+
     raw_name = Path(filename).name
     if not raw_name or "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
@@ -667,22 +673,34 @@ async def studio_upload_source(
     if not safe_name.lower().endswith(ext):
         safe_name = f"{safe_name}{ext}"
 
-    dest_dir = ROOT / "data" / "projects" / project_id / "source"
+    projects_root = vod_ingestor.projects_root.resolve()
+    dest_dir = (projects_root / project_id / "source").resolve()
+    if not dest_dir.is_relative_to(projects_root):
+        raise HTTPException(status_code=403, detail="Destino de upload fora da pasta de projetos.")
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = (dest_dir / f"{int(time.time())}_{safe_name}").resolve()
-    if dest_path.parent != dest_dir.resolve():
+    if dest_path.parent != dest_dir or not dest_path.is_relative_to(projects_root):
         raise HTTPException(status_code=403, detail="Destino de upload inválido.")
 
+    max_bytes = int(os.environ.get("FASTCLIPPER_MAX_UPLOAD_BYTES", str(2 * 1024 * 1024 * 1024)))
+    part_path = dest_path.with_suffix(dest_path.suffix + ".part")
     total_bytes = 0
-    with open(dest_path, "wb") as out_f:
-        async for chunk in request.stream():
-            if chunk:
-                out_f.write(chunk)
-                total_bytes += len(chunk)
+    try:
+        with open(part_path, "wb") as out_f:
+            async for chunk in request.stream():
+                if chunk:
+                    total_bytes += len(chunk)
+                    if total_bytes > max_bytes:
+                        raise HTTPException(status_code=413, detail="Arquivo excede o limite máximo de upload.")
+                    out_f.write(chunk)
 
-    if total_bytes == 0:
-        dest_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="Arquivo enviado está vazio.")
+        if total_bytes == 0:
+            raise HTTPException(status_code=400, detail="Arquivo enviado está vazio.")
+
+        part_path.replace(dest_path)
+    except BaseException:
+        part_path.unlink(missing_ok=True)
+        raise
 
     try:
         return vod_ingestor.import_local_file(
@@ -784,8 +802,11 @@ def studio_preview_layout(req: PreviewLayoutRequest):
     img_path = previews_dir / img_name
 
     mode = LayoutMode.STACKED if req.layout.lower() == "stacked" else LayoutMode.SOLO
-    fc = Rectangle(**req.facecam_rect) if req.facecam_rect else None
-    gp = Rectangle(**req.gameplay_rect) if req.gameplay_rect else None
+    try:
+        fc = Rectangle(**req.facecam_rect) if req.facecam_rect else None
+        gp = Rectangle(**req.gameplay_rect) if req.gameplay_rect else None
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Retângulo de enquadramento inválido: {exc}")
     cfg = ChannelLayoutConfig(
         channel_id="preview",
         mode=mode,
@@ -897,15 +918,18 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
         )
         job_ids.append(job.job_id)
 
-    pipeline_runner.clear_cancel()
+    batch_cancel = threading.Event()
+    with _active_cancel_lock:
+        _active_cancel_events.add(batch_cancel)
 
-    def _run_batch(count: int):
-        for _ in range(count):
-            if pipeline_runner.is_cancelled():
-                break
-            pipeline_runner.run_single_step()
+    def _run_batch(target_ids: List[str], ev: threading.Event):
+        try:
+            pipeline_runner.run_jobs(target_ids, cancel_event=ev)
+        finally:
+            with _active_cancel_lock:
+                _active_cancel_events.discard(ev)
 
-    background_tasks.add_task(_run_batch, len(job_ids))
+    background_tasks.add_task(_run_batch, list(job_ids), batch_cancel)
     return {"enqueued": len(job_ids), "job_ids": job_ids}
 
 
@@ -1015,14 +1039,20 @@ def studio_storage_stats():
     return {
         "output_clips_mb": _dir_size_mb(pipeline_runner.output_dir),
         "exports_mb": _dir_size_mb(package_exporter.exports_root),
-        "live_buffers_mb": _dir_size_mb(ROOT / "data" / "projects" / "proj_default" / "live"),
+        "live_buffers_mb": _dir_size_mb(DATA_DIR / "projects" / "proj_default" / "live"),
     }
+
+
+_active_cancel_lock = threading.Lock()
+_active_cancel_events: set[threading.Event] = set()
 
 
 @app.post("/api/v1/studio/cancel", tags=["Studio"])
 def studio_cancel_active_render():
-    """Solicita cancelamento imediato do FFmpeg e do lote em andamento."""
-    pipeline_runner.request_cancel()
+    """Solicita cancelamento imediato dos renders manuais ou lotes ativos (sem afetar a live)."""
+    with _active_cancel_lock:
+        for ev in list(_active_cancel_events):
+            ev.set()
     return {"status": "cancelling", "cancelled": True}
 
 
@@ -1050,16 +1080,18 @@ def studio_batch_status(ids: str = Query("")):
         "done": done,
         "failed": failed,
         "active": active,
-        "cancelled": pipeline_runner.is_cancelled(),
+        "cancelled": any(j.get("status") == JobStatus.CANCELADO.value for j in jobs),
         "jobs": jobs,
     }
 
 
 @app.post("/api/v1/studio/render-now", tags=["Studio"])
 def render_studio_clip_immediate(req: StudioRenderRequest):
-    """Renderiza um clipe 9:16 imediatamente a partir dos parâmetros do Studio."""
+    """Renderiza um clipe imediatamente a partir dos parâmetros do Studio."""
     safe_path = validate_input_path(req.video_path)
-    pipeline_runner.clear_cancel()
+    job_cancel = threading.Event()
+    with _active_cancel_lock:
+        _active_cancel_events.add(job_cancel)
 
     subtitles_payload = None
     subtitles_are_absolute = req.subtitles_are_absolute
@@ -1099,7 +1131,11 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "watermark_text": req.watermark_text,
     }
 
-    result = pipeline_runner.render_clip(params)
+    try:
+        result = pipeline_runner.render_clip(params, cancel_event=job_cancel)
+    finally:
+        with _active_cancel_lock:
+            _active_cancel_events.discard(job_cancel)
     if not result.success:
         raise HTTPException(status_code=400, detail=result.error or "Falha na renderização do clipe")
 

@@ -258,14 +258,14 @@ class IsolatedRenderAdapter:
             enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
 
             full_cmd = list(cmd) + enc_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
-            res = subprocess.run(full_cmd, capture_output=True, text=True)
+            res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=600)
 
             if res.returncode != 0 and enc != SOFTWARE_ENCODER:
                 logger.warning("Hardware encoder '%s' falhou no buffer. Recorrendo ao %s.", enc, SOFTWARE_ENCODER)
                 self.encoder_manager.mark_broken(enc)
                 sw_args = self.encoder_manager.get_encoder_args(SOFTWARE_ENCODER, width=1080, height=1920)
                 full_cmd = list(cmd) + sw_args + ["-c:a", "aac", "-b:a", "128k", str(output_path)]
-                res = subprocess.run(full_cmd, capture_output=True, text=True)
+                res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=600)
 
             return res.returncode == 0
         finally:

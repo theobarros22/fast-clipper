@@ -60,7 +60,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     if ffmpeg_bin:
         try:
-            ver = subprocess.run([ffmpeg_bin, "-version"], capture_output=True, text=True)
+            ver = subprocess.run([ffmpeg_bin, "-version"], capture_output=True, text=True, timeout=15)
             linha_ver = ver.stdout.splitlines()[0] if ver.stdout else "Desconhecido"
             print(f"         {linha_ver}")
         except Exception as e:

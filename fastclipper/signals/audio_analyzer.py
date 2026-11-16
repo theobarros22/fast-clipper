@@ -62,7 +62,7 @@ class AudioPeakDetector:
         ])
 
         try:
-            res = subprocess.run(cmd, capture_output=True, check=True)
+            res = subprocess.run(cmd, capture_output=True, check=True, timeout=180)
             raw_bytes = res.stdout
         except subprocess.CalledProcessError as e:
             logger.warning("Falha ao extrair áudio de %s: %s", video, e)

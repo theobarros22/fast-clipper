@@ -63,7 +63,7 @@ class SceneDetector:
             "-",
         ])
 
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         # O showinfo imprime no stderr
         saida = res.stderr
 

@@ -480,6 +480,56 @@ class SQLiteTaskQueue:
             updated = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (target["job_id"],)).fetchone()
             return self._row_to_job(updated)
 
+    def lease_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        lease_duration_s: float = 60.0,
+    ) -> Optional[QueueJob]:
+        now = time.time()
+        with self._lock, self.store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT * FROM jobs
+                WHERE job_id = ?
+                  AND (status = ?
+                       OR (status IN (?, ?) AND leased_until IS NOT NULL AND leased_until < ? AND attempts < max_attempts))
+                """,
+                (job_id, JobStatus.CRIADO.value, JobStatus.ANALISANDO.value, JobStatus.RENDERIZANDO.value, now),
+            ).fetchone()
+            if not row:
+                conn.rollback()
+                return None
+
+            new_status = JobStatus.RENDERIZANDO.value if "render" in row["job_type"] else JobStatus.ANALISANDO.value
+            conn.execute(
+                """
+                UPDATE jobs
+                SET worker_id = ?, leased_until = ?, attempts = attempts + 1,
+                    status = ?, step_description = ?, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (worker_id, now + lease_duration_s, new_status, f"Assumido pelo worker {worker_id}", now, job_id),
+            )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            return self._row_to_job(updated)
+
+    def cancel_job(self, job_id: str, reason: str = "Cancelado pelo usuário") -> Optional[QueueJob]:
+        now = time.time()
+        with self._lock, self.store.connect() as conn:
+            conn.execute(
+                """
+                UPDATE jobs
+                SET status = ?, step_description = ?, error = ?, leased_until = NULL, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (JobStatus.CANCELADO.value, reason, reason, now, job_id),
+            )
+            row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            return self._row_to_job(row) if row else None
+
     def update_progress(
         self,
         job_id: str,

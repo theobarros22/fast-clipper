@@ -59,7 +59,7 @@ class LocalRecordingSource:
             "-of", "json",
             str(self.video_path),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
         dados = json.loads(res.stdout)
         return float(dados["format"]["duration"])
 
@@ -129,7 +129,7 @@ class LocalRecordingSource:
                 "-avoid_negative_ts", "make_zero",
                 str(caminho_segmento),
             ]
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if res.returncode != 0:
                 logger.error("Erro ao gerar segmento %d via ffmpeg: %s", segment_idx, res.stderr)
                 return False

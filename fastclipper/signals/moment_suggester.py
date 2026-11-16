@@ -38,7 +38,7 @@ def extract_audio_rms_series(video_path: str | Path, ffmpeg_bin: Optional[str] =
         "-f", "null",
         "-",
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    res = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=120)
     samples: List[Tuple[float, float]] = []
     current_t = 0.0
     for line in res.stderr.splitlines():

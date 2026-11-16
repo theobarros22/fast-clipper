@@ -98,19 +98,25 @@ class PipelineRunner:
     def is_cancelled(self) -> bool:
         return self._cancel_event.is_set()
 
-    def render_clip(self, params: Dict[str, Any], job_id: Optional[str] = None) -> JobExecutionResult:
+    def render_clip(
+        self,
+        params: Dict[str, Any],
+        job_id: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> JobExecutionResult:
         """Executa a cadeia de renderização de um clipe (9:16, 16:9 ou ambos) a partir de um vídeo fonte."""
         job_id = job_id or f"clip_{uuid.uuid4().hex[:8]}"
         t0 = time.time()
 
         aspect_ratio = str(params.get("aspect_ratio", "9:16")).strip().lower()
         if aspect_ratio in ("both", "ambos"):
-            res_v = self.render_clip({**params, "aspect_ratio": "9:16"}, job_id=job_id)
+            res_v = self.render_clip({**params, "aspect_ratio": "9:16"}, job_id=job_id, cancel_event=cancel_event)
             if not res_v.success:
                 return res_v
             res_h = self.render_clip(
                 {**params, "aspect_ratio": "16:9", "output_filename": f"{job_id}_16x9.mp4"},
                 job_id=f"{job_id}_16x9",
+                cancel_event=cancel_event,
             )
             if not res_h.success:
                 return res_h
@@ -145,8 +151,12 @@ class PipelineRunner:
                 error=f"Duração inválida do corte: início={inicio_s}s, fim={fim_s}s.",
             )
 
-        # 1. Media Pre-Check (validação antecipada)
-        precheck_res = self.prechecker.probe(video_path, require_audio=params.get("require_audio", True))
+        # 1. Media Pre-Check (validação antecipada, aceita vídeos sem áudio por padrão)
+        explicit_require_audio = params.get("require_audio")
+        precheck_res = self.prechecker.probe(
+            video_path,
+            require_audio=bool(explicit_require_audio) if explicit_require_audio is not None else False,
+        )
         if not precheck_res.is_valid:
             return JobExecutionResult(
                 job_id=job_id,
@@ -154,6 +164,18 @@ class PipelineRunner:
                 error=f"Mídia de origem reprovada no pré-check: {precheck_res.message}",
                 metadata={"precheck": precheck_res.to_dict()},
             )
+
+        if precheck_res.duration_s and fim_s > precheck_res.duration_s:
+            fim_s = float(precheck_res.duration_s)
+            duracao_planejada = fim_s - inicio_s
+            if duracao_planejada <= 0:
+                return JobExecutionResult(
+                    job_id=job_id,
+                    success=False,
+                    error=f"Corte fora da duração da origem ({precheck_res.duration_s:.2f}s).",
+                )
+
+        require_audio = bool(explicit_require_audio) if explicit_require_audio is not None else bool(precheck_res.has_audio)
 
         # 2. Configuração de Layout (9:16 Solo/Empilhado ou 16:9 Horizontal)
         is_16x9 = aspect_ratio == "16:9"
@@ -221,9 +243,13 @@ class PipelineRunner:
             ass_path=ass_path if burn_subtitles else None,
             normalize_audio=bool(params.get("normalize_audio", False)),
             watermark_text=params.get("watermark_text"),
+            cancel_event=cancel_event,
         )
 
         if not render_ok or not caminho_saida.exists():
+            caminho_saida.unlink(missing_ok=True)
+            if ass_path is not None:
+                ass_path.unlink(missing_ok=True)
             return JobExecutionResult(
                 job_id=job_id,
                 success=False,
@@ -236,14 +262,17 @@ class PipelineRunner:
             duracao_esperada=duracao_planejada,
             largura_esperada=target_w,
             altura_esperada=target_h,
-            require_audio=params.get("require_audio", True),
+            require_audio=require_audio,
         )
 
         if not validacao["valid"]:
+            caminho_saida.unlink(missing_ok=True)
+            if ass_path is not None:
+                ass_path.unlink(missing_ok=True)
             return JobExecutionResult(
                 job_id=job_id,
                 success=False,
-                output_video_path=str(caminho_saida),
+                output_video_path=None,
                 error=f"Clipe gerado falhou na validação estrita do FFprobe: {validacao['errors']}",
                 metadata={"ffprobe_errors": validacao["errors"]},
             )
@@ -264,7 +293,11 @@ class PipelineRunner:
             },
         )
 
-    def process_job(self, job: QueueJob) -> JobExecutionResult:
+    def process_job(
+        self,
+        job: QueueJob,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> JobExecutionResult:
         """Executa um trabalho assumido da fila atualizando progresso e estados."""
         logger.info("Worker %s iniciando job %s (%s)", self.worker_id, job.job_id, job.job_type)
 
@@ -277,7 +310,11 @@ class PipelineRunner:
                     step_description="Validando mídia e parâmetros",
                 )
 
-                result = self.render_clip(job.params, job_id=job.job_id)
+                result = self.render_clip(job.params, job_id=job.job_id, cancel_event=cancel_event)
+
+                if cancel_event is not None and cancel_event.is_set() and not result.success:
+                    self.queue.cancel_job(job.job_id, "Cancelado pelo usuário")
+                    return result
 
                 if result.success:
                     self.queue.complete_job(
@@ -354,6 +391,23 @@ class PipelineRunner:
     # Métodos Auxiliares Internos
     # -------------------------------------------------------------------------
 
+    def run_jobs(
+        self,
+        job_ids: List[str],
+        cancel_event: Optional[threading.Event] = None,
+    ) -> List[JobExecutionResult]:
+        """Executa exclusivamente os job_ids informados, marcando restantes como cancelados se interrompido."""
+        results: List[JobExecutionResult] = []
+        for idx, jid in enumerate(job_ids):
+            if cancel_event is not None and cancel_event.is_set():
+                for rem_id in job_ids[idx:]:
+                    self.queue.cancel_job(rem_id, "Cancelado pelo usuário")
+                break
+            job = self.queue.lease_job(jid, self.worker_id)
+            if job is not None:
+                results.append(self.process_job(job, cancel_event=cancel_event))
+        return results
+
     def _render_ffmpeg_direct(
         self,
         source_path: Path,
@@ -364,6 +418,7 @@ class PipelineRunner:
         ass_path: Optional[Path] = None,
         normalize_audio: bool = False,
         watermark_text: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> bool:
         """Renderiza via núcleo unificado render_core com suporte a layout 9:16 e legenda ASS."""
         return render_vertical_ffmpeg(
@@ -376,7 +431,7 @@ class PipelineRunner:
             source_path=source_path,
             layout_config=layout_config,
             ass_path=ass_path,
-            cancel_event=self._cancel_event,
+            cancel_event=cancel_event,
             normalize_audio=normalize_audio,
             watermark_text=watermark_text,
         )
