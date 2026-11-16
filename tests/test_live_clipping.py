@@ -133,4 +133,25 @@ def test_studio_live_api_endpoints():
     home = client.get("/")
     assert home.status_code == 200
     assert "btn-live-start" in home.text
+    assert "live_keywords" in home.text
     assert "innerHTML" not in home.text
+
+
+def test_live_auto_clip_keywords_trigger(tmp_path):
+    runner = PipelineRunner(queue=DurableTaskQueue(), output_dir=tmp_path / "out")
+    seg_file = tmp_path / "seg_00000.ts"
+    seg_file.write_bytes(b"fake")
+
+    session = LiveClipSession(
+        session_id="live_kw_test",
+        url="https://x.com/user/status/1",
+        session_dir=tmp_path / "sess",
+        pipeline_runner=runner,
+        auto_clip=True,
+        auto_clip_threshold_db=10.0,  # evita trigger por volume no teste unitário
+        auto_clip_keywords=["Absurdo", "olha isso"],
+        transcribe_fn=lambda _p, _l: {"full_text": "Cara, isso aqui foi ABSURDO demais!", "words": []},
+    )
+    triggered = session._evaluate_auto_clip_trigger(seg_file)
+    assert triggered == "Auto Palavra: absurdo"
+    assert "ABSURDO" in session.last_transcript_snippet

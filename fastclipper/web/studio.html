@@ -454,6 +454,9 @@
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <input type="text" id="live_keywords" class="input-text" style="flex:1; min-width:220px;" placeholder="Palavras-chave auto-clip (ex: absurdo, olha isso, urgente)">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s</button>
                             <button type="button" id="btn-live-mark-post" class="chip" disabled>Marcar Agora (+15s)</button>
                             <span id="live-status-text" style="font-size:12px; color:var(--text-muted);">Nenhuma live ativa.</span>
@@ -1000,7 +1003,8 @@ http://127.0.0.1:8000/docs</div>
             const statusEl = document.getElementById('live-status-text');
             if (running) {
                 const plat = st.platform === 'x' ? 'X' : 'YouTube';
-                statusEl.textContent = `Ao vivo (${plat}) · ${fmtNum(st.buffer_duration_s || 0, 0)}s em buffer · ${st.clips_generated || 0} clipe(s)`;
+                const snip = st.last_transcript_snippet ? ` · "${st.last_transcript_snippet}"` : '';
+                statusEl.textContent = `Ao vivo (${plat}) · ${fmtNum(st.buffer_duration_s || 0, 0)}s em buffer · ${st.clips_generated || 0} clipe(s)${snip}`;
             } else if (st && st.last_error) {
                 statusEl.textContent = `Erro na live: ${st.last_error}`;
             } else if (st && st.segments_count > 0) {
@@ -1035,12 +1039,15 @@ http://127.0.0.1:8000/docs</div>
             setStatus('Conectando à transmissão ao vivo...', 'busy');
             try {
                 const opts = currentLiveRenderOpts();
+                const kwRaw = (document.getElementById('live_keywords').value || '').trim();
+                const keywords = kwRaw ? kwRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
                 const st = await api('/api/v1/studio/live/start', {
                     method: 'POST',
                     body: JSON.stringify({
                         url,
                         auto_clip: document.getElementById('live_autoclip').checked,
                         auto_clip_threshold_db: parseFloat(document.getElementById('live_threshold_db').value) || -12.0,
+                        auto_clip_keywords: keywords,
                         ...opts,
                     }),
                 });

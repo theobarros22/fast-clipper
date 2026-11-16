@@ -243,6 +243,7 @@ class LiveStartRequest(BaseModel):
     auto_clip: bool = False
     auto_clip_duration_s: float = 25.0
     auto_clip_threshold_db: float = -12.0
+    auto_clip_keywords: List[str] = []
     layout: str = "stacked"
     facecam_rect: Optional[Dict[str, Any]] = None
     gameplay_rect: Optional[Dict[str, Any]] = None
@@ -869,6 +870,7 @@ def studio_live_start(req: LiveStartRequest):
             auto_clip=req.auto_clip,
             auto_clip_duration_s=req.auto_clip_duration_s,
             auto_clip_threshold_db=req.auto_clip_threshold_db,
+            auto_clip_keywords=req.auto_clip_keywords,
             default_render_opts=render_opts,
         )
         return session.get_status()

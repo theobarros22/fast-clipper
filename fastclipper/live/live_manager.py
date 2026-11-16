@@ -125,6 +125,7 @@ class LiveClipSession:
         auto_clip: bool = False,
         auto_clip_duration_s: float = 25.0,
         auto_clip_threshold_db: float = -12.0,
+        auto_clip_keywords: Optional[List[str]] = None,
         default_render_opts: Optional[Dict[str, Any]] = None,
         stream_resolver: Optional[Callable[[str], str]] = None,
         transcribe_fn: Optional[Callable[[Path, str], Dict[str, Any]]] = None,
@@ -147,10 +148,12 @@ class LiveClipSession:
         self.auto_clip = bool(auto_clip)
         self.auto_clip_duration_s = max(5.0, float(auto_clip_duration_s))
         self.auto_clip_threshold_db = float(auto_clip_threshold_db)
+        self.auto_clip_keywords = [k.strip().lower() for k in (auto_clip_keywords or []) if k and k.strip()]
         self.auto_clip_cooldown_s = max(20.0, self.auto_clip_duration_s)
         self.default_render_opts = dict(default_render_opts or {})
         self.stream_resolver = stream_resolver or resolve_live_stream_url
         self.transcribe_fn = transcribe_fn
+        self.last_transcript_snippet: str = ""
 
         self.buffer = SegmentedBuffer(
             buffer_dir=self.segments_dir,
@@ -296,6 +299,27 @@ class LiveClipSession:
                 self.clock.seek(t_fim)
         return novos
 
+    def _evaluate_auto_clip_trigger(self, seg_path: Path) -> Optional[str]:
+        """Avalia pico de áudio e, se configurado, palavras-chave transcritas no segmento."""
+        max_db = _measure_segment_volume_db(self.ffmpeg_bin, seg_path)
+        if max_db is not None and max_db > self.auto_clip_threshold_db:
+            return f"Auto Pico ({max_db:.1f} dB)"
+
+        if self.auto_clip_keywords and self.transcribe_fn is not None:
+            try:
+                lang = str(self.default_render_opts.get("language", "pt") or "pt")
+                tr = self.transcribe_fn(seg_path, lang) or {}
+                txt = str(tr.get("full_text", "") or "").strip()
+                if txt:
+                    self.last_transcript_snippet = txt[-140:]
+                    low = txt.lower()
+                    for kw in self.auto_clip_keywords:
+                        if kw in low:
+                            return f"Auto Palavra: {kw}"
+            except Exception as exc:
+                logger.warning("Erro ao avaliar palavras-chave no segmento ao vivo: %s", exc)
+        return None
+
     def _monitor_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
@@ -312,16 +336,16 @@ class LiveClipSession:
                         daemon=True,
                     ).start()
 
-                # Auto-clipping por pico de áudio nos novos segmentos
-                if self.auto_clip and novos and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
+                # Auto-clipping por pico de áudio ou palavras-chave nos novos segmentos
+                if self.auto_clip and novos and now_t >= 4.0 and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
                     last_seg_file = self.segments_dir / f"seg_{novos[-1]:05d}.ts"
-                    max_db = _measure_segment_volume_db(self.ffmpeg_bin, last_seg_file)
-                    if max_db is not None and max_db > self.auto_clip_threshold_db and now_t >= 4.0:
+                    triggered_title = self._evaluate_auto_clip_trigger(last_seg_file)
+                    if triggered_title:
                         self._last_auto_clip_s = now_t
                         ini = max(0.0, now_t - self.auto_clip_duration_s)
                         threading.Thread(
                             target=self._render_window_worker,
-                            args=(ini, now_t, f"Auto Pico ({max_db:.1f} dB)", self.default_render_opts, None),
+                            args=(ini, now_t, triggered_title, self.default_render_opts, None),
                             daemon=True,
                         ).start()
 
@@ -554,6 +578,8 @@ class LiveClipSession:
             "segments_count": len(self.buffer),
             "buffer_duration_s": round(self.clock.current_time(), 1),
             "auto_clip": self.auto_clip,
+            "auto_clip_keywords": list(self.auto_clip_keywords),
+            "last_transcript_snippet": self.last_transcript_snippet,
             "clips_generated": len(clips),
             "recent_clips": clips[-10:],
             "pending_marks": len(pending),
@@ -584,6 +610,7 @@ class LiveManager:
         auto_clip: bool = False,
         auto_clip_duration_s: float = 25.0,
         auto_clip_threshold_db: float = -12.0,
+        auto_clip_keywords: Optional[List[str]] = None,
         default_render_opts: Optional[Dict[str, Any]] = None,
         stream_resolver: Optional[Callable[[str], str]] = None,
     ) -> LiveClipSession:
@@ -603,6 +630,7 @@ class LiveManager:
                 auto_clip=auto_clip,
                 auto_clip_duration_s=auto_clip_duration_s,
                 auto_clip_threshold_db=auto_clip_threshold_db,
+                auto_clip_keywords=auto_clip_keywords,
                 default_render_opts=default_render_opts,
                 stream_resolver=stream_resolver,
                 transcribe_fn=self.transcribe_fn,
