@@ -244,20 +244,21 @@ flowchart LR
 
 ---
 
-## 9. Decisões pendentes (responsável: dono do produto)
+## 9. Decisões registradas e pendentes
 
-1. **Modelo de receita prioritário:** campanhas de clipping pagas por visualização, serviço pago para streamers, ou canais próprios com conteúdo licenciado. Isso define o que o pacote de exportação precisa ter.
-2. **Plataforma principal de publicação** (TikTok, Shorts ou Reels), que define os presets de duração, segurança de bordas e legenda.
-3. **Hardware disponível** (modelo da GPU), que define o modelo de Whisper e o encoder padrão.
-4. **Autorização para push** dos commits locais ao GitHub e adoção do push diário.
+1. **Modelo de receita prioritário:** *(pendente)* campanhas de clipping pagas por visualização, serviço pago para streamers, ou canais próprios com conteúdo licenciado.
+2. **Plataformas de publicação (confirmado):** TikTok, YouTube Shorts, Instagram Reels e YouTube (1080×1920 vertical para curtos + suporte a exportação de pacotes multi-plataforma).
+3. **Hardware disponível (confirmado):** **NVIDIA GeForce RTX 3050 6 GB** — encoder `h264_nvenc` e `faster-whisper` com `compute_type="int8_float16"` (modelo `small`/`medium` cabe com folga nos 6 GB de VRAM).
+4. **Autorização para push:** *(pendente)* envio dos commits locais ao GitHub.
 
 ---
 
-## 10. Próximas 48 horas
+## 10. Status do Sprint 0
 
-- [ ] 0.1 Corrigir a sincronia relativa da legenda + teste com início ≠ 0
-- [ ] 0.2 Fechar CORS, `Host` e caminhos permitidos
-- [ ] 0.3 Restaurar a especificação do Studio Classic em `tests/legacy/`
-- [ ] 0.4 Remover a lista de arquivos do `pytest.ini` e publicar os números reais
-- [ ] 0.5 / 0.6 `pyproject.toml` com extras; instalar `faster-whisper` e `yt-dlp`; validar CUDA
-- [ ] 0.7 Push para o GitHub (após autorização)
+- [x] 0.1 Corrigir a sincronia relativa da legenda + teste com início ≠ 0
+- [x] 0.2 Fechar CORS, `Host` e caminhos permitidos
+- [x] 0.3 Restaurar a especificação do Studio Classic em `tests/legacy/test_studio_classic.py`
+- [x] 0.4 Remover a lista de arquivos do `pytest.ini` e publicar os números reais
+- [x] 0.5 / 0.6 `pyproject.toml` com extras; `faster-whisper 1.2.1` + `yt-dlp 2026.10.26` instalados; CUDA validado (`cuda_device_count = 1`)
+- [x] 0.8 Rotular fila em memória e cofre base64 como protótipos no código
+- [ ] 0.7 Push para o GitHub (aguardando autorização explícita)

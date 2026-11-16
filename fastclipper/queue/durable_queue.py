@@ -1,5 +1,8 @@
 """
-Fila de processamento assíncrono durável com semântica de leasing atômico e idempotência estrita.
+PROTÓTIPO EM MEMÓRIA — Fila de processamento assíncrono com semântica de leasing e idempotência.
+
+Aviso: os dados residem apenas em memória (perdidos ao reiniciar). Persistência em SQLite será
+introduzida no Sprint 1 do plano-mestre-v3.
 """
 
 import hashlib

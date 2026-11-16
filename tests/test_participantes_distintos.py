@@ -10,6 +10,9 @@ PARA-DESENVOLVEDORES.md e se perdeu na troca para identidade facial.
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.heavy
+pytest.importorskip("cv2", reason="Dependência opcional [vision] (cv2) não instalada")
+
 import rostos
 
 

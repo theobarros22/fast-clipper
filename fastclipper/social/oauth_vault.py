@@ -1,11 +1,9 @@
 """
-Cofre seguro de tokens OAuth2, publicação idempotente e botão de emergência (Kill Switch).
+PROTÓTIPO CONGELADO — Cofre de tokens OAuth2, publicação idempotente e Kill Switch.
 
-Garante que:
-1. Autopost seja estritamente opt-in por canal e plataforma (nunca ligado por padrão).
-2. Publicações com a mesma chave idempotente nunca postem duplicatas após timeout.
-3. Tokens possam ser revogados instantaneamente.
-4. O Kill Switch emergencial suspenda todas as postagens da organização.
+Aviso: módulo congelado (Gate C do plano-mestre-v3). O método de ofuscação atual usa
+base64 + SHA-256 (não é criptografia autenticada) e NÃO deve armazenar tokens reais de produção
+até ser substituído por AES-GCM/DPAPI/KMS.
 """
 
 import base64

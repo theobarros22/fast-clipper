@@ -6,6 +6,9 @@ import sys
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.heavy
+pytest.importorskip("cv2", reason="Dependência opcional [vision] (cv2) não instalada")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import enquadramento as enq

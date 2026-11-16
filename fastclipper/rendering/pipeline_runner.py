@@ -143,10 +143,16 @@ class PipelineRunner:
 
         # 3. Geração de Legendas (.ass) se houver palavras/cues
         subtitles_data = params.get("subtitles")
+        subtitles_are_absolute = bool(params.get("subtitles_are_absolute", False))
         ass_path: Optional[Path] = None
 
         if subtitles_data:
-            cues = self._parse_subtitles_data(subtitles_data)
+            cues = self._parse_subtitles_data(
+                subtitles_data,
+                inicio_s=inicio_s,
+                duracao_s=duracao_planejada,
+                subtitles_are_absolute=subtitles_are_absolute,
+            )
             if cues:
                 preset_name = params.get("subtitle_preset", "viral_bounce")
                 try:
@@ -367,17 +373,23 @@ class PipelineRunner:
 
         return True
 
-    def _parse_subtitles_data(self, data: Any) -> List[CaptionCue]:
-        """Converte dados brutos de legendas em CaptionCue válidos."""
+    def _parse_subtitles_data(
+        self,
+        data: Any,
+        inicio_s: float = 0.0,
+        duracao_s: float = 0.0,
+        subtitles_are_absolute: bool = False,
+    ) -> List[CaptionCue]:
+        """Converte dados brutos de legendas em CaptionCue válidos e relativos ao início do clipe (0s)."""
         if not data:
             return []
 
+        cues: List[CaptionCue] = []
+
         # Se já for lista de CaptionCue
         if isinstance(data, list) and len(data) > 0 and isinstance(data[0], CaptionCue):
-            return data
-
-        # Se for lista de dicionários
-        if isinstance(data, list):
+            cues = list(data)
+        elif isinstance(data, list):
             # Caso 1: lista de palavras individuais {"word": "...", "start_s": ..., "end_s": ...}
             if all("word" in item for item in data if isinstance(item, dict)):
                 words = [
@@ -388,23 +400,72 @@ class PipelineRunner:
                     )
                     for item in data
                 ]
-                return self.subtitle_engine.chunk_words(words)
-
-            # Caso 2: lista de cues estruturadas {"start_s": ..., "end_s": ..., "text": ...}
-            cues = []
-            for idx, item in enumerate(data):
-                if isinstance(item, dict):
-                    cues.append(
-                        CaptionCue(
-                            cue_id=item.get("cue_id", f"cue_{idx:04d}"),
-                            start_s=float(item.get("start_s", 0.0)),
-                            end_s=float(item.get("end_s", 0.0)),
-                            text=str(item.get("text", "")),
+                cues = self.subtitle_engine.chunk_words(words)
+            else:
+                # Caso 2: lista de cues estruturadas {"start_s": ..., "end_s": ..., "text": ...}
+                for idx, item in enumerate(data):
+                    if isinstance(item, dict):
+                        cues.append(
+                            CaptionCue(
+                                cue_id=item.get("cue_id", f"cue_{idx:04d}"),
+                                start_s=float(item.get("start_s", 0.0)),
+                                end_s=float(item.get("end_s", 0.0)),
+                                text=str(item.get("text", "")),
+                            )
                         )
-                    )
+
+        return self._normalize_cues_to_clip(
+            cues=cues,
+            inicio_s=inicio_s,
+            duracao_s=duracao_s,
+            subtitles_are_absolute=subtitles_are_absolute,
+        )
+
+    def _normalize_cues_to_clip(
+        self,
+        cues: List[CaptionCue],
+        inicio_s: float,
+        duracao_s: float,
+        subtitles_are_absolute: bool = False,
+    ) -> List[CaptionCue]:
+        """Garante que os timestamps das legendas sejam relativos ao início do clipe (0.0s)."""
+        if not cues or inicio_s <= 0.0:
             return cues
 
-        return []
+        min_start = min(c.start_s for c in cues)
+        should_shift = subtitles_are_absolute or (min_start >= inicio_s)
+        if not should_shift:
+            return cues
+
+        normalized: List[CaptionCue] = []
+        for cue in cues:
+            rel_start = cue.start_s - inicio_s
+            rel_end = cue.end_s - inicio_s
+            if rel_end <= 0.0 or (duracao_s > 0.0 and rel_start >= duracao_s):
+                continue
+
+            clamped_start = max(0.0, rel_start)
+            clamped_end = min(duracao_s, rel_end) if duracao_s > 0.0 else rel_end
+            if clamped_end <= clamped_start:
+                continue
+
+            rel_words: List[WordTiming] = []
+            for w in cue.words:
+                w_start = max(0.0, w.start_s - inicio_s)
+                w_end = min(duracao_s, w.end_s - inicio_s) if duracao_s > 0.0 else (w.end_s - inicio_s)
+                if w_end > w_start:
+                    rel_words.append(WordTiming(word=w.word, start_s=round(w_start, 3), end_s=round(w_end, 3)))
+
+            normalized.append(
+                CaptionCue(
+                    cue_id=cue.cue_id,
+                    start_s=round(clamped_start, 3),
+                    end_s=round(clamped_end, 3),
+                    text=cue.text,
+                    words=rel_words,
+                )
+            )
+        return normalized
 
     def _process_comparison_job(self, job: QueueJob) -> JobExecutionResult:
         """Processa trabalho de comparação Cross-POV multi-criador."""

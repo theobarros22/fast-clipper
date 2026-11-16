@@ -6,6 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
+pytestmark = pytest.mark.legacy
+pytest.importorskip("studio", reason="Módulo studio/ do Classic ausente na cópia pública")
+
 
 RAIZ = Path(__file__).resolve().parents[1]
 PASTA_STUDIO = RAIZ / "studio"

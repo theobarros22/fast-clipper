@@ -5,6 +5,11 @@ import types
 import unittest
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = pytest.mark.heavy
+pytest.importorskip("cv2", reason="Dependência opcional [vision] (cv2) não instalada")
+
 from checkpoint import (
     atualizar_progresso,
     carregar_checkpoint,

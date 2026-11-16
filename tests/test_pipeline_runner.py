@@ -235,3 +235,30 @@ def test_cli_queue_worker_run_pipeline(monkeypatch, capsys):
     assert ret == 0
     captured = capsys.readouterr()
     assert "FAST CLIPPER — FILA DURÁVEL" in captured.out
+
+
+def test_pipeline_runner_absolute_subtitles_shifted_to_clip(runner_with_tmp):
+    """Legendas com timestamps absolutos do VOD devem ser deslocadas para 0s no clipe cortado."""
+    runner, queue, out_dir = runner_with_tmp
+
+    params = {
+        "video_path": str(SYNTHETIC_VIDEO),
+        "inicio_s": 2.0,
+        "fim_s": 3.5,
+        "layout": "solo",
+        "subtitles_are_absolute": True,
+        "subtitles": [
+            {"word": "FORA", "start_s": 0.5, "end_s": 1.0},
+            {"word": "DENTRO", "start_s": 2.2, "end_s": 2.8},
+            {"word": "CLIPS", "start_s": 2.9, "end_s": 3.3},
+        ],
+        "burn_subtitles": True,
+    }
+
+    result = runner.render_clip(params, job_id="test_abs_shift")
+    assert result.success is True
+    assert result.subtitles_path is not None
+    ass_content = Path(result.subtitles_path).read_text(encoding="utf-8")
+    assert "FORA" not in ass_content
+    assert "DENTRO" in ass_content
+    assert "Dialogue: 0,0:00:00.20," in ass_content

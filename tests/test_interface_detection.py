@@ -4,6 +4,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = pytest.mark.legacy
+pytest.importorskip("gradio", reason="Interface legada Gradio do Classic não instalada")
+
 import runtime
 
 with patch.object(runtime, 'garantir_instancia_unica', return_value=True):

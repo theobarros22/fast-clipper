@@ -12,6 +12,11 @@ import time
 import unittest
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.heavy
+pytest.importorskip("cv2", reason="Dependência opcional [vision] (cv2) não instalada")
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 

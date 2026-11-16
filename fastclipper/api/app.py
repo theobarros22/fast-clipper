@@ -15,8 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Header, Query, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Header, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -34,20 +33,68 @@ from fastclipper.rendering.pipeline_runner import PipelineRunner
 from fastclipper.social.oauth_vault import OAuthTokenVault, SocialPlatform
 
 ROOT = Path(__file__).resolve().parents[2]
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "testserver"}
+
+
+def get_allowed_input_dirs() -> List[Path]:
+    dirs = [
+        (ROOT / "data").resolve(),
+        (ROOT / "tests" / "fixtures").resolve(),
+    ]
+    extra = os.environ.get("FASTCLIPPER_ALLOWED_DIRS", "")
+    if extra:
+        for item in extra.split(os.pathsep):
+            if item.strip():
+                dirs.append(Path(item.strip()).resolve())
+    return dirs
+
+
+def validate_input_path(video_path: str) -> Path:
+    """Garante que o arquivo de entrada esteja dentro das pastas locais permitidas."""
+    if not video_path or not video_path.strip():
+        raise HTTPException(status_code=400, detail="Caminho do vídeo não informado.")
+    p = Path(video_path)
+    if not p.is_absolute():
+        p = ROOT / p
+    resolved = p.resolve()
+
+    allowed = get_allowed_input_dirs()
+    for base in allowed:
+        try:
+            resolved.relative_to(base)
+            return resolved
+        except ValueError:
+            continue
+
+    raise HTTPException(
+        status_code=403,
+        detail="Acesso negado: o arquivo está fora das pastas permitidas (data/ ou tests/fixtures/).",
+    )
+
 
 app = FastAPI(
     title="Fast Clipper API & Control Plane",
     version="2.0.0",
-    description="Plataforma distribuída de monitoramento de lives, clipping 9:16 e colaboração editorial.",
+    description="Plataforma local de monitoramento, clipping 9:16 e revisão editorial.",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.middleware("http")
+async def local_security_guard(request: Request, call_next):
+    """Protege o servidor local contra DNS rebinding e requisições cross-origin maliciosas."""
+    host_header = request.headers.get("host", "")
+    hostname = host_header.split(":")[0].lower()
+    if hostname and hostname not in ALLOWED_HOSTS:
+        return JSONResponse(status_code=403, content={"detail": "Host não permitido."})
+
+    origin = request.headers.get("origin")
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        if (parsed.hostname or "").lower() not in ALLOWED_HOSTS:
+            return JSONResponse(status_code=403, content={"detail": "Origem cross-origin bloqueada."})
+
+    return await call_next(request)
 
 # Serviços globais em memória / persistência
 collab_service = CollaborationService()
@@ -192,8 +239,9 @@ def system_status():
 
 @app.post("/api/v1/precheck", tags=["Mídia"])
 def run_media_precheck(req: PrecheckRequest):
+    safe_path = validate_input_path(req.video_path)
     checker = MediaPrechecker(min_duration_s=req.min_duration_s)
-    res = checker.probe(req.video_path, require_audio=req.require_audio)
+    res = checker.probe(safe_path, require_audio=req.require_audio)
     return res.to_dict()
 
 
@@ -374,7 +422,12 @@ def list_studio_clips():
 @app.get("/api/v1/studio/video/{filename}", tags=["Studio"])
 def stream_studio_clip(filename: str):
     """Serve um clipe de vídeo renderizado para reprodução ou download."""
-    caminho = pipeline_runner.output_dir / filename
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=403, detail="Nome de arquivo inválido.")
+    out_dir = pipeline_runner.output_dir.resolve()
+    caminho = (out_dir / filename).resolve()
+    if caminho.parent != out_dir:
+        raise HTTPException(status_code=403, detail="Acesso negado fora da pasta de saída.")
     if not caminho.is_file():
         raise HTTPException(status_code=404, detail="Clipe não encontrado")
     return FileResponse(str(caminho), media_type="video/mp4", filename=filename)
@@ -383,6 +436,8 @@ def stream_studio_clip(filename: str):
 @app.post("/api/v1/studio/render-now", tags=["Studio"])
 def render_studio_clip_immediate(req: StudioRenderRequest):
     """Renderiza um clipe 9:16 imediatamente a partir dos parâmetros do Studio."""
+    safe_path = validate_input_path(req.video_path)
+
     subtitles_payload = None
     if req.subtitle_text and req.subtitle_text.strip():
         palavras = req.subtitle_text.strip().split()
@@ -391,7 +446,8 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
             passo = duracao / len(palavras)
             subtitles_payload = []
             for i, p in enumerate(palavras):
-                w_start = req.inicio_s + i * passo
+                # Tempos sempre relativos ao início do clipe cortado (0.0s)
+                w_start = i * passo
                 w_end = w_start + passo * 0.95
                 subtitles_payload.append({
                     "word": p,
@@ -400,7 +456,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
                 })
 
     params = {
-        "video_path": req.video_path,
+        "video_path": str(safe_path),
         "inicio_s": req.inicio_s,
         "fim_s": req.fim_s,
         "layout": req.layout,

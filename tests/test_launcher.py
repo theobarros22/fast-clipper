@@ -3,6 +3,7 @@ import unittest
 
 
 class TestLauncher(unittest.TestCase):
+    @unittest.skipUnless((Path(__file__).parents[1] / "ViralCutter.vbs").is_file(), "ViralCutter.vbs ausente na cópia pública")
     def test_lancador_ativa_ou_abre_app_nativo_sem_diagnostico_extra(self):
         lancador = Path(__file__).parents[1] / "ViralCutter.vbs"
 

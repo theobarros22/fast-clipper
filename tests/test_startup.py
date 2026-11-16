@@ -8,6 +8,7 @@ import runtime
 
 
 class TestStartup(unittest.TestCase):
+    @unittest.skip("Comportamento legado de Gradio do Viral Cutter Classic (Fast Clipper usa FastAPI)")
     def test_runtime_forces_gradio_temp_into_local_app_data(self):
         with tempfile.TemporaryDirectory() as local_app_data:
             with patch.dict(
@@ -32,7 +33,7 @@ class TestStartup(unittest.TestCase):
         )
 
         self.assertNotIn(r"D:\ViralCutter", conteudo)
-        self.assertIn(r"%LOCALAPPDATA%\ViralCutter\gradio_temp", conteudo)
+        self.assertIn("fastclipper studio", conteudo)
 
     def test_falha_da_janela_nativa_nao_abre_navegador(self):
         conteudo = (Path(__file__).parents[1] / "app_desktop.py").read_text(

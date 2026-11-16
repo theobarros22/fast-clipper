@@ -74,13 +74,67 @@ def test_studio_render_now_with_subtitles(tmp_path):
 
 def test_studio_render_invalid_video():
     payload = {
-        "video_path": "caminho/nao/existente/video.mp4",
+        "video_path": "tests/fixtures/synthetic/video_inexistente.mp4",
         "inicio_s": 0.0,
         "fim_s": 5.0,
     }
     res = client.post("/api/v1/studio/render-now", json=payload)
     assert res.status_code == 400
     assert "detail" in res.json()
+
+
+def test_studio_render_nonzero_start_has_relative_subtitles():
+    """Garante que legendas com inicio_s > 0 comecem em ~0s no clipe cortado (A1)."""
+    payload = {
+        "video_path": str(SYNTHETIC_VIDEO),
+        "inicio_s": 2.0,
+        "fim_s": 3.5,
+        "layout": "solo",
+        "subtitle_text": "CORTE NO MEIO DO VIDEO",
+        "subtitle_preset": "viral_bounce",
+        "burn_subtitles": True,
+    }
+    res = client.post("/api/v1/studio/render-now", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+
+    # Verifica o arquivo .ass gerado no diretório de saída
+    out_video = Path(data["output_path"])
+    ass_candidates = list(out_video.parent.glob(f"{out_video.stem.replace('_9x16', '')}*_subs.ass"))
+    assert len(ass_candidates) == 1
+    ass_text = ass_candidates[0].read_text(encoding="utf-8")
+    assert "Dialogue: 0,0:00:00.00," in ass_text
+
+
+def test_studio_security_guards():
+    """Garante proteção contra acesso a pastas arbitrárias, cross-origin e host spoofing (A5)."""
+    # 1. Caminho fora das pastas permitidas (data/ ou tests/fixtures/)
+    res_path = client.post(
+        "/api/v1/studio/render-now",
+        json={"video_path": "C:/Windows/System32/notepad.exe", "inicio_s": 0.0, "fim_s": 2.0},
+    )
+    assert res_path.status_code == 403
+
+    # 2. Precheck fora das pastas permitidas
+    res_pre = client.post("/api/v1/precheck", json={"video_path": "README.md"})
+    assert res_pre.status_code == 403
+
+    # 3. Origem cross-origin maliciosa
+    res_origin = client.post(
+        "/api/v1/studio/render-now",
+        headers={"Origin": "https://evil-site.example"},
+        json={"video_path": str(SYNTHETIC_VIDEO), "inicio_s": 0.0, "fim_s": 1.0},
+    )
+    assert res_origin.status_code == 403
+
+    # 4. Host inválido (DNS rebinding)
+    res_host = client.get("/health", headers={"Host": "evil.com:8000"})
+    assert res_host.status_code == 403
+
+    # 5. Path traversal no endpoint de streaming
+    res_trav = client.get("/api/v1/studio/video/..%5C..%5CREADME.md")
+    assert res_trav.status_code in (403, 404)
 
 
 def test_studio_stream_clip_not_found():
