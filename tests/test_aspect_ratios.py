@@ -104,6 +104,25 @@ def test_render_with_normalize_audio(tmp_path):
     assert Path(res.output_video_path).is_file()
 
 
+def test_render_solo_align_left_and_right(tmp_path):
+    if not FIXTURE_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    runner = PipelineRunner(queue=DurableTaskQueue(), output_dir=tmp_path)
+    for align in ("left", "right"):
+        res = runner.render_clip({
+            "video_path": str(FIXTURE_VIDEO),
+            "inicio_s": 0.0,
+            "fim_s": 1.5,
+            "layout": "solo",
+            "aspect_ratio": "9:16",
+            "solo_align": align,
+            "burn_subtitles": False,
+        })
+        assert res.success, res.error
+        assert Path(res.output_video_path).is_file()
+
+
 def test_render_with_watermark_text(tmp_path):
     if not FIXTURE_VIDEO.exists():
         pytest.skip("Fixture sintética não gerada.")
@@ -120,3 +139,22 @@ def test_render_with_watermark_text(tmp_path):
     })
     assert res.success, res.error
     assert Path(res.output_video_path).is_file()
+
+
+def test_render_solo_align_left_and_right(tmp_path):
+    if not FIXTURE_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    runner = PipelineRunner(queue=DurableTaskQueue(), output_dir=tmp_path)
+    for align in ("left", "right"):
+        res = runner.render_clip({
+            "video_path": str(FIXTURE_VIDEO),
+            "inicio_s": 0.0,
+            "fim_s": 1.5,
+            "layout": "solo",
+            "aspect_ratio": "9:16",
+            "solo_align": align,
+            "burn_subtitles": False,
+        })
+        assert res.success, res.error
+        assert Path(res.output_video_path).is_file()

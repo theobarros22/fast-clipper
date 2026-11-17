@@ -39,6 +39,7 @@ def render_vertical_ffmpeg(
     normalize_audio: bool = False,
     watermark_text: Optional[str] = None,
     error_out: Optional[List[str]] = None,
+    solo_align: str = "center",
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -78,6 +79,21 @@ def render_vertical_ffmpeg(
             layout_config.effective_mode() == LayoutMode.STACKED
             and layout_config.facecam_rect is not None
         )
+        if (
+            not is_stacked
+            and layout_config.gameplay_rect is None
+            and layout_config.target_height > layout_config.target_width
+            and source_w > source_h
+            and solo_align in ("left", "right")
+        ):
+            crop_w = max(2, int(round(source_h * layout_config.target_width / layout_config.target_height)))
+            crop_w = min(source_w, crop_w - (crop_w % 2))
+            crop_x = 0 if solo_align == "left" else max(0, source_w - crop_w)
+            filtro_base = (
+                f"crop={crop_w}:{source_h}:{crop_x}:0,"
+                f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={target_w}:{target_h}"
+            )
     else:
         filtro_base = f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,crop={target_w}:{target_h}"
         is_stacked = False

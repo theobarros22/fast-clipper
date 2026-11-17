@@ -541,6 +541,15 @@
                     </button>
                 </div>
 
+                <div id="solo-config" class="field" style="margin-top:10px; margin-bottom:0;">
+                    <label class="label" for="solo_align">Posição horizontal no Solo 9:16</label>
+                    <select id="solo_align" class="select-box">
+                        <option value="center" selected>Centro (padrão)</option>
+                        <option value="left">Esquerda (pessoa à esquerda)</option>
+                        <option value="right">Direita (pessoa à direita)</option>
+                    </select>
+                </div>
+
                 <div id="stacked-config" class="stacked-box">
                     <div class="row-2">
                         <div class="field">
@@ -1437,6 +1446,7 @@ http://127.0.0.1:8000/docs</div>
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
                         stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
                         aspect_ratio: document.getElementById('aspect_ratio').value,
+                        solo_align: document.getElementById('solo_align').value,
                         words: transcribedWords,
                         subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
@@ -1516,6 +1526,7 @@ http://127.0.0.1:8000/docs</div>
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
                         stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
                         aspect_ratio: document.getElementById('aspect_ratio').value,
+                        solo_align: document.getElementById('solo_align').value,
                         subtitle_text: useRealWords ? null : document.getElementById('subtitle_text').value.trim(),
                         words: useRealWords ? transcribedWords : null,
                         subtitles_are_absolute: useRealWords,

@@ -246,6 +246,7 @@ class PipelineRunner:
             watermark_text=params.get("watermark_text"),
             cancel_event=cancel_event,
             error_out=ffmpeg_errors,
+            solo_align=str(params.get("solo_align", "center") or "center"),
         )
 
         if not render_ok or not caminho_saida.exists():
@@ -423,6 +424,7 @@ class PipelineRunner:
         watermark_text: Optional[str] = None,
         cancel_event: Optional[threading.Event] = None,
         error_out: Optional[List[str]] = None,
+        solo_align: str = "center",
     ) -> bool:
         """Renderiza via núcleo unificado render_core com suporte a layout 9:16 e legenda ASS."""
         return render_vertical_ffmpeg(
@@ -439,6 +441,7 @@ class PipelineRunner:
             normalize_audio=normalize_audio,
             watermark_text=watermark_text,
             error_out=error_out,
+            solo_align=solo_align,
         )
 
     def _parse_subtitles_data(

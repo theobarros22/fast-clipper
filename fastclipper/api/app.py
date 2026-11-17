@@ -235,6 +235,7 @@ class StudioRenderRequest(BaseModel):
     gameplay_rect: Optional[Dict[str, int]] = None
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
+    solo_align: Literal["left", "center", "right"] = "center"
     subtitle_text: Optional[str] = None
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
@@ -388,6 +389,7 @@ class BatchRenderRequest(BaseModel):
     gameplay_rect: Optional[Dict[str, int]] = None
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
+    solo_align: Literal["left", "center", "right"] = "center"
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
@@ -980,6 +982,7 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "gameplay_rect": req.gameplay_rect,
             "stacked_facecam_height": req.stacked_facecam_height,
             "aspect_ratio": req.aspect_ratio,
+            "solo_align": req.solo_align,
             "subtitles": req.words,
             "subtitles_are_absolute": req.subtitles_are_absolute,
             "subtitle_preset": req.subtitle_preset,
@@ -1200,6 +1203,7 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "gameplay_rect": req.gameplay_rect,
         "stacked_facecam_height": req.stacked_facecam_height,
         "aspect_ratio": req.aspect_ratio,
+        "solo_align": req.solo_align,
         "subtitles": subtitles_payload,
         "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,
