@@ -24,7 +24,7 @@ for exe_name in ("ffmpeg", "ffprobe", "yt-dlp"):
     if found:
         binaries.append((found, "."))
 
-# Inclui faster_whisper / ctranslate2 se instalados (sem empacotar torch gigante)
+# Inclui faster_whisper / ctranslate2 e DLLs NVIDIA CUDA se instalados (sem empacotar torch gigante)
 for pkg in ("faster_whisper", "ctranslate2"):
     try:
         pkg_datas, pkg_bins, pkg_hidden = collect_all(pkg)
@@ -33,6 +33,12 @@ for pkg in ("faster_whisper", "ctranslate2"):
         hiddenimports += pkg_hidden
     except Exception:
         pass
+
+import sys as _sys
+_nvidia_root = Path(_sys.prefix) / "Lib" / "site-packages" / "nvidia"
+if _nvidia_root.is_dir():
+    for _dll in _nvidia_root.glob("*/bin/*.dll"):
+        binaries.append((str(_dll), "."))
 
 a = Analysis(
     [str(ROOT / "fastclipper" / "desktop_entry.py")],
