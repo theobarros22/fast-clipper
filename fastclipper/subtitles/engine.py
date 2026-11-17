@@ -62,9 +62,15 @@ class SubtitleEngine:
 
             dur_atual = w.end_s - bloco_atual[0].start_s
             gap = w.start_s - bloco_atual[-1].end_s
+            chars_atual = sum(len(item.word) for item in bloco_atual) + len(bloco_atual) - 1
 
-            # Quebra se exceder contagem de palavras, duração ou pausa vocal > 0.6s
-            if len(bloco_atual) >= max_words_per_cue or dur_atual > max_duration_s or gap > 0.6:
+            # Quebra se exceder contagem de palavras, caracteres por linha, duração ou pausa vocal > 0.6s
+            if (
+                len(bloco_atual) >= max_words_per_cue
+                or (len(bloco_atual) >= 2 and chars_atual + 1 + len(w.word) > 24)
+                or dur_atual > max_duration_s
+                or gap > 0.6
+            ):
                 texto = " ".join(item.word for item in bloco_atual)
                 cues.append(
                     CaptionCue(
@@ -134,21 +140,22 @@ class SubtitleEngine:
 ScriptType: v4.00+
 PlayResX: {play_res_x}
 PlayResY: {play_res_y}
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 """
 
-        # Configurações de estilo
+        # Configurações de estilo com margens seguras para não cortar nas bordas em 9:16 e 16:9
         if preset == CaptionPreset.VIRAL_BOUNCE:
             # Amarelo vibrante, borda preta grossa, fonte maiúscula e pesada
-            style_line = "Style: Default,Arial,68,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,2,40,40,240,1\n"
+            style_line = "Style: Default,Arial,56,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,80,80,260,1\n"
         elif preset == CaptionPreset.MINIMAL_CLEAN:
             # Estilo AutoClip Calm: branco puro, borda preta discreta de 2px
-            style_line = "Style: Default,Arial,56,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,1,2,40,40,200,1\n"
+            style_line = "Style: Default,Arial,50,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,1,2,80,80,220,1\n"
         else:  # CINEMA_EDITORIAL
-            style_line = "Style: Default,Georgia,54,&H00E0E0E0,&H000000FF,&H00000000,&HB0000000,0,0,0,0,100,100,2,0,1,3,2,2,50,50,220,1\n"
+            style_line = "Style: Default,Georgia,48,&H00E0E0E0,&H000000FF,&H00000000,&HB0000000,0,0,0,0,100,100,2,0,1,3,2,2,80,80,230,1\n"
 
         events_header = """
 [Events]
