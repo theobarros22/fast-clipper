@@ -469,7 +469,7 @@
                             </select>
                             <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s (M)</button>
                             <button type="button" id="btn-live-mark-post" class="chip" disabled>Marcar Agora (+15s)</button>
-                            <span id="live-status-text" style="font-size:12px; color:var(--text-muted);">Nenhuma live ativa.</span>
+                            <span id="live-status-text" aria-live="polite" style="font-size:12px; color:var(--text-muted);">Nenhuma live ativa.</span>
                         </div>
                     </div>
                 </details>
@@ -675,7 +675,7 @@
                     <a id="btn-download-zip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar ZIP</a>
                     <button id="btn-copy-export-text" type="button" class="chip" style="display:none;">Copiar Copy</button>
                 </div>
-                <div id="export-copy-preview" style="display:none; margin-top:10px; text-align:left; font-size:12px; color:var(--sub); background:var(--raised); border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; white-space:pre-wrap;"></div>
+                <div id="export-copy-preview" aria-live="polite" style="display:none; margin-top:10px; text-align:left; font-size:12px; color:var(--sub); background:var(--raised); border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; white-space:pre-wrap;"></div>
             </section>
 
             <section class="panel">
@@ -771,7 +771,7 @@
                 <span>Armazenamento local</span>
                 <button type="button" id="btn-cleanup-live" class="chip">Limpar buffers de lives antigas</button>
             </div>
-            <div id="ctrl-storage" style="font-size:13px; color:var(--sub);">Carregando uso de disco...</div>
+            <div id="ctrl-storage" aria-live="polite" style="font-size:13px; color:var(--sub);">Carregando uso de disco...</div>
         </div>
 
         <div class="panel">

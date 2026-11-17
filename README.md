@@ -27,6 +27,21 @@ A ideia é reduzir o tempo entre um momento interessante e um clipe pronto para 
 
 A primeira etapa prevista é auditar a base, estabelecer testes reproduzíveis e avaliar gravações autorizadas de lives de GTA V, incluindo enquadramento de gameplay e facecam. Esses testes não foram apresentados aqui como concluídos.
 
+### Como executar (Quickstart)
+
+```bash
+pip install -e ".[dev,transcribe]"
+python tests/fixtures/gerar_midia_sintetica.py
+python -m pytest -q
+python -m fastclipper.desktop_entry   # abre o Studio em http://127.0.0.1:8000
+```
+
+Para gerar o executável Windows (`dist/FastClipper/FastClipper.exe`):
+
+```bash
+python tools/build_exe.py
+```
+
 ### Participe
 
 Contribuições são bem-vindas em processamento de vídeo, FFmpeg, Python, análise de cenas, acessibilidade, interface, testes e documentação. Antes de iniciar uma mudança importante, abra uma issue para discutir escopo e compatibilidade.

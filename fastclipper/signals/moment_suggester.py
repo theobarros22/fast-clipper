@@ -23,36 +23,6 @@ from fastclipper.signals.models import GamingEditorialProfile
 
 logger = logging.getLogger(__name__)
 
-_RMS_RE = re.compile(r"RMS_level=([-\d\.]+|-inf)")
-_PTS_RE = re.compile(r"pts_time:([\d\.]+)")
-
-
-def extract_audio_rms_series(video_path: str | Path, ffmpeg_bin: Optional[str] = None) -> List[Tuple[float, float]]:
-    """Extrai série temporal (timestamp_s, rms_db) do áudio via FFmpeg astats."""
-    ffmpeg = ffmpeg_bin or shutil.which("ffmpeg") or "ffmpeg"
-    cmd = [
-        ffmpeg,
-        "-v", "info",
-        "-i", str(video_path),
-        "-af", "aselect='1',asetnsamples=n=44100:p=0,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level",
-        "-f", "null",
-        "-",
-    ]
-    res = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=120)
-    samples: List[Tuple[float, float]] = []
-    current_t = 0.0
-    for line in res.stderr.splitlines():
-        m_pts = _PTS_RE.search(line)
-        if m_pts:
-            current_t = float(m_pts.group(1))
-        m_rms = _RMS_RE.search(line)
-        if m_rms:
-            raw = m_rms.group(1)
-            db = -90.0 if raw == "-inf" else float(raw)
-            # Converte dB [-90..0] para escala linear positiva [0..90] para cálculo de Z-score
-            samples.append((round(current_t, 2), max(0.0, 90.0 + db)))
-    return samples
-
 
 def words_to_subtitle_rows(words: List[Dict[str, Any]], pause_threshold_s: float = 0.6) -> List[SubtitleRow]:
     """Agrupa palavras do Whisper em linhas/frases contínuas para snap de fronteira."""
