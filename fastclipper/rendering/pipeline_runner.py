@@ -181,7 +181,14 @@ class PipelineRunner:
         is_16x9 = aspect_ratio == "16:9"
         target_w, target_h = (1920, 1080) if is_16x9 else (1080, 1920)
         layout_mode_str = params.get("layout_mode", params.get("layout", "solo")).lower()
-        mode = LayoutMode.SOLO if is_16x9 else (LayoutMode.STACKED if layout_mode_str == "stacked" else LayoutMode.SOLO)
+        if is_16x9:
+            mode = LayoutMode.SOLO
+        elif layout_mode_str == "stacked":
+            mode = LayoutMode.STACKED
+        elif layout_mode_str == "blur_fit":
+            mode = LayoutMode.BLUR_FIT
+        else:
+            mode = LayoutMode.SOLO
 
         fc_rect = None
         if not is_16x9 and "facecam_rect" in params and params["facecam_rect"]:

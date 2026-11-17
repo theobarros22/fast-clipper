@@ -107,6 +107,14 @@ class LayoutEngine:
         target_w = config.target_width
         target_h = config.target_height
 
+        if mode == LayoutMode.BLUR_FIT:
+            return (
+                f"[0:v] scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={target_w}:{target_h},boxblur=20:5,eq=brightness=-0.15 [bg]; "
+                f"[0:v] scale={target_w}:{target_h}:force_original_aspect_ratio=decrease [fg]; "
+                f"[bg][fg] overlay=(W-w)/2:(H-h)/2 [outv]"
+            )
+
         if mode == LayoutMode.SOLO or config.facecam_rect is None:
             # Modo Solo (9:16 ou 16:9)
             if config.gameplay_rect:

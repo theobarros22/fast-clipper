@@ -530,10 +530,14 @@
                         <input type="text" id="watermark_text" class="input-text" maxlength="40" placeholder="Ex: @meucanal">
                     </div>
                 </div>
-                <div class="layout-options">
+                <div class="layout-options" style="grid-template-columns: repeat(3, 1fr);">
                     <button type="button" id="card-solo" class="layout-card" aria-pressed="true">
                         <strong>Solo 9:16</strong>
-                        <span>Corte vertical centralizado</span>
+                        <span>Corte vertical preenchido</span>
+                    </button>
+                    <button type="button" id="card-blur-fit" class="layout-card" aria-pressed="false">
+                        <strong>Encaixar 16:9</strong>
+                        <span>Tela inteira + fundo desfocado</span>
                     </button>
                     <button type="button" id="card-stacked" class="layout-card" aria-pressed="false">
                         <strong>Empilhado (Stacked)</strong>
@@ -643,8 +647,11 @@
         <aside class="right-sticky">
             <section class="panel" style="text-align: center;">
                 <div class="panel-title">
-                    <span>Pré-visualização 9:16</span>
-                    <a id="btn-download-clip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar MP4</a>
+                    <span id="preview-panel-title">Pré-visualização 9:16</span>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button type="button" id="btn-toggle-mockup-ratio" class="chip" style="padding:3px 8px; font-size:11px;">16:9 / 9:16</button>
+                        <a id="btn-download-clip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar MP4</a>
+                    </div>
                 </div>
 
                 <div class="phone-mockup">
@@ -909,8 +916,11 @@ http://127.0.0.1:8000/docs</div>
         function selectLayout(mode) {
             currentLayout = mode;
             document.getElementById('card-solo').setAttribute('aria-pressed', mode === 'solo' ? 'true' : 'false');
+            document.getElementById('card-blur-fit').setAttribute('aria-pressed', mode === 'blur_fit' ? 'true' : 'false');
             document.getElementById('card-stacked').setAttribute('aria-pressed', mode === 'stacked' ? 'true' : 'false');
             document.getElementById('stacked-config').style.display = mode === 'stacked' ? 'block' : 'none';
+            const soloCfg = document.getElementById('solo-config');
+            if (soloCfg) soloCfg.style.display = mode === 'solo' ? 'block' : 'none';
             saveFormState();
         }
 
@@ -1549,15 +1559,27 @@ http://127.0.0.1:8000/docs</div>
             }
         }
 
-        function playClipInMockup(url, filename) {
-            const player = document.getElementById('player-preview');
-            const img = document.getElementById('layout-preview-img');
+        function setMockupAspectRatio(is16x9) {
             const mockup = document.querySelector('.phone-mockup');
+            const titleEl = document.getElementById('preview-panel-title');
             if (mockup) {
-                const is16x9 = (filename || '').includes('_16x9');
                 mockup.style.aspectRatio = is16x9 ? '16 / 9' : '9 / 16';
                 mockup.style.maxWidth = is16x9 ? '100%' : '268px';
             }
+            if (titleEl) {
+                titleEl.textContent = is16x9 ? 'Pré-visualização 16:9' : 'Pré-visualização 9:16';
+            }
+        }
+
+        function playClipInMockup(url, filename) {
+            const player = document.getElementById('player-preview');
+            const img = document.getElementById('layout-preview-img');
+            setMockupAspectRatio((filename || '').includes('_16x9'));
+            player.onloadedmetadata = () => {
+                if (player.videoWidth && player.videoHeight) {
+                    setMockupAspectRatio(player.videoWidth > player.videoHeight);
+                }
+            };
             const placeholder = document.getElementById('video-placeholder');
             const dlBtn = document.getElementById('btn-download-clip');
             const expBar = document.getElementById('export-quick-bar');
@@ -1803,7 +1825,13 @@ http://127.0.0.1:8000/docs</div>
             document.getElementById('btn-suggest').addEventListener('click', suggestMoments);
             document.getElementById('btn-batch-render').addEventListener('click', renderBatchSelected);
             document.getElementById('card-solo').addEventListener('click', () => selectLayout('solo'));
+            document.getElementById('card-blur-fit').addEventListener('click', () => selectLayout('blur_fit'));
             document.getElementById('card-stacked').addEventListener('click', () => selectLayout('stacked'));
+            document.getElementById('btn-toggle-mockup-ratio').addEventListener('click', () => {
+                const mockup = document.querySelector('.phone-mockup');
+                const currently16x9 = mockup && mockup.style.aspectRatio === '16 / 9';
+                setMockupAspectRatio(!currently16x9);
+            });
             document.getElementById('btn-save-preset').addEventListener('click', saveCurrentPreset);
             document.getElementById('channel-preset-select').addEventListener('change', (e) => {
                 const p = savedPresetsMap[e.target.value];

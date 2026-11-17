@@ -19,6 +19,7 @@ class LayoutMode(str, Enum):
     AUTO = "auto"
     SOLO = "solo"
     STACKED = "stacked"
+    BLUR_FIT = "blur_fit"
 
 
 @dataclass

@@ -75,9 +75,10 @@ def render_vertical_ffmpeg(
                 error_out.append(msg)
             return False
         filtro_base = layout_engine.build_filter_graph(layout_config, source_w, source_h)
+        eff_mode = layout_config.effective_mode()
         is_stacked = (
-            layout_config.effective_mode() == LayoutMode.STACKED
-            and layout_config.facecam_rect is not None
+            eff_mode == LayoutMode.BLUR_FIT
+            or (eff_mode == LayoutMode.STACKED and layout_config.facecam_rect is not None)
         )
         if (
             not is_stacked
@@ -88,7 +89,8 @@ def render_vertical_ffmpeg(
         ):
             crop_w = max(2, int(round(source_h * layout_config.target_width / layout_config.target_height)))
             crop_w = min(source_w, crop_w - (crop_w % 2))
-            crop_x = 0 if solo_align == "left" else max(0, source_w - crop_w)
+            max_x = max(0, source_w - crop_w)
+            crop_x = int(round(max_x * (0.22 if solo_align == "left" else 0.78)))
             filtro_base = (
                 f"crop={crop_w}:{source_h}:{crop_x}:0,"
                 f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
