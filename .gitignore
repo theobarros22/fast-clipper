@@ -16,3 +16,7 @@ data/
 outputs/
 tests/fixtures/manifesto_local.json
 tests/fixtures/synthetic/
+
+# PyInstaller build artifacts
+build/
+dist/

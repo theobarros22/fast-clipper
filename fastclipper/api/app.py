@@ -44,12 +44,18 @@ from fastclipper.social.oauth_vault import OAuthTokenVault, SocialPlatform
 from fastclipper.storage.sqlite_store import SQLiteStore, SQLiteTaskQueue
 from fastclipper.transcribe.whisper_service import WhisperTranscriptionService
 
-ROOT = Path(__file__).resolve().parents[2]
+BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])).resolve()
+ROOT = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parents[2]
+)
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "testserver"}
 
 
 def get_allowed_input_dirs() -> List[Path]:
     dirs = [
+        DATA_DIR.resolve(),
         (ROOT / "data").resolve(),
         (ROOT / "tests" / "fixtures").resolve(),
     ]
@@ -1251,7 +1257,7 @@ def favicon():
 
 @app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 def get_dashboard():
-    studio_html = ROOT / "fastclipper" / "web" / "studio.html"
+    studio_html = BUNDLE_ROOT / "fastclipper" / "web" / "studio.html"
     return HTMLResponse(content=studio_html.read_text(encoding="utf-8"), status_code=200)
 
 

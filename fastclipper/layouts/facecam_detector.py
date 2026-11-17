@@ -9,13 +9,14 @@ que a sugestão automática requer o extra `[vision]` e fornece presets de canto
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastclipper.layouts.config import Rectangle
 
 logger = logging.getLogger(__name__)
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])).resolve()
 
 
 def compute_iou(a: Rectangle, b: Rectangle) -> float:
