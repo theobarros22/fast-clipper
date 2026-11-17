@@ -46,39 +46,46 @@ def generate_post_copy(
         if slug:
             base_tags.insert(0, f"#{slug}")
 
-    if use_llm and os.environ.get("ANTHROPIC_API_KEY"):
-        try:
-            import anthropic  # type: ignore
+    llm_warning: Optional[str] = None
+    if use_llm:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            llm_warning = "ANTHROPIC_API_KEY não configurada; usado template offline."
+        else:
+            try:
+                import anthropic  # type: ignore
 
-            client = anthropic.Anthropic()
-            msg = client.messages.create(
-                model="claude-3-5-haiku-latest",
-                max_tokens=240,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Crie 1 título curto (máx 65 caracteres) e 1 descrição de 1 frase em português para {plat} "
-                            f"baseado neste trecho: '{transcript_text[:400]}'. "
-                            "Responda no formato:\nTITULO: ...\nDESCRICAO: ..."
-                        ),
+                model_name = os.environ.get("FASTCLIPPER_LLM_MODEL", "claude-3-5-haiku-latest")
+                client = anthropic.Anthropic()
+                msg = client.messages.create(
+                    model=model_name,
+                    max_tokens=240,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Crie 1 título curto (máx 65 caracteres) e 1 descrição de 1 frase em português para {plat} "
+                                f"baseado neste trecho: '{transcript_text[:400]}'. "
+                                "Responda no formato:\nTITULO: ...\nDESCRICAO: ..."
+                            ),
+                        }
+                    ],
+                )
+                text = msg.content[0].text
+                m_tit = re.search(r"TITULO:\s*(.+)", text)
+                m_desc = re.search(r"DESCRICAO:\s*(.+)", text)
+                if m_tit and m_desc:
+                    return {
+                        "platform": plat,
+                        "hook": hook,
+                        "title": m_tit.group(1).strip()[:80],
+                        "description": m_desc.group(1).strip(),
+                        "hashtags": base_tags[:6],
+                        "source": "anthropic",
+                        "warning": None,
                     }
-                ],
-            )
-            text = msg.content[0].text
-            m_tit = re.search(r"TITULO:\s*(.+)", text)
-            m_desc = re.search(r"DESCRICAO:\s*(.+)", text)
-            if m_tit and m_desc:
-                return {
-                    "platform": plat,
-                    "hook": hook,
-                    "title": m_tit.group(1).strip()[:80],
-                    "description": m_desc.group(1).strip(),
-                    "hashtags": base_tags[:6],
-                    "source": "anthropic",
-                }
-        except Exception:
-            pass
+                llm_warning = "Resposta da LLM fora do formato esperado; usado template offline."
+            except Exception as exc:
+                llm_warning = f"Falha na API de LLM ({exc}); usado template offline."
 
     title = hook if len(hook) <= 65 else hook[:62] + "..."
     credit = f"Créditos: {channel_name}. " if channel_name else ""
@@ -91,4 +98,5 @@ def generate_post_copy(
         "description": description,
         "hashtags": base_tags[:6],
         "source": "template",
+        "warning": llm_warning,
     }

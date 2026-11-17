@@ -33,6 +33,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install ruff
+
+      - name: Lint (Ruff critical checks)
+        run: ruff check fastclipper tests --select E9,F63,F7,F82
 
       - name: Check UTF-8 & mojibake in fastclipper
         run: |

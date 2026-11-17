@@ -406,7 +406,7 @@
                     <label class="label" for="video_path">Caminho do vídeo (em data/ ou tests/fixtures/)</label>
                     <div style="display:flex; gap:8px; align-items:center;">
                         <input type="text" id="video_path" class="input-text" style="flex:1;"
-                               value="tests/fixtures/synthetic/sintetico_gameplay_facecam.mp4"
+                               value=""
                                placeholder="Ex: data/projects/meu_canal/source/live.mp4">
                         <input type="file" id="local-video-upload" aria-label="Selecionar arquivo de vídeo do computador" accept="video/*,.mkv,.ts" style="display:none;">
                         <button type="button" id="btn-upload-local" class="chip" style="white-space:nowrap;">Enviar do PC</button>
@@ -1002,6 +1002,12 @@ http://127.0.0.1:8000/docs</div>
                 for (const s of items) {
                     const dur = s.duration_s ? `${s.duration_s.toFixed(1)}s` : 'local';
                     sel.appendChild(el('option', { value: s.file_path, textContent: `${s.title} (${dur})` }));
+                }
+                const vp = document.getElementById('video_path');
+                if (vp && !vp.value.trim() && items.length > 0) {
+                    vp.value = items[0].file_path;
+                    sel.value = items[0].file_path;
+                    loadSourceVideo();
                 }
             } catch (err) {
                 setStatus(`Erro ao carregar fontes: ${err.message}`, 'err');
