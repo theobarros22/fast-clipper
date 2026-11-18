@@ -940,11 +940,19 @@ http://127.0.0.1:8000/docs</div>
         }
 
         async function api(url, options = {}) {
-            const res = await fetch(url, options);
+            // fetch() com corpo string envia "text/plain" por padrao; o FastAPI so le JSON com o header correto (senao: 422).
+            const headers = { ...(options.headers || {}) };
+            const hasCT = Object.keys(headers).some((k) => k.toLowerCase() === 'content-type');
+            if (typeof options.body === 'string' && !hasCT) headers['Content-Type'] = 'application/json';
+            const res = await fetch(url, { ...options, headers });
             let data = null;
             try { data = await res.json(); } catch (e) {}
             if (!res.ok) {
-                throw new Error((data && data.detail) || `Erro HTTP ${res.status}`);
+                let detail = data && data.detail;
+                if (Array.isArray(detail)) {
+                    detail = detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join(' | ');
+                }
+                throw new Error(detail || `Erro HTTP ${res.status}`);
             }
             return data;
         }
@@ -1075,6 +1083,10 @@ http://127.0.0.1:8000/docs</div>
         async function loadSourceVideo() {
             const videoPath = document.getElementById('video_path').value.trim();
             if (!videoPath) return;
+            if (/^https?:\/\//i.test(videoPath)) {
+                setStatus('Este campo aceita apenas arquivo local. Para live ou link, use o campo "URL da live" e clique em Iniciar Live.', 'err');
+                return;
+            }
             const player = document.getElementById('source-player');
             player.src = `/api/v1/studio/source-video?path=${encodeURIComponent(videoPath)}`;
 
