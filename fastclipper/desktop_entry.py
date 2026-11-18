@@ -7,6 +7,7 @@ binários empacotados (ffmpeg, ffprobe, yt-dlp) e abre o Studio no navegador.
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 import socket
 import sys
@@ -38,8 +39,22 @@ def _configure_frozen_environment() -> None:
             os.environ["FASTCLIPPER_DATA_DIR"] = str(data_dir)
 
 
+def _is_server_running(port: int = 8000) -> bool:
+    """Verifica se o Fast Clipper Studio já está rodando e respondendo na porta."""
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/v1/status",
+            headers={"User-Agent": "FastClipperDesktop/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def _pick_free_port(preferred: int = 8000) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("127.0.0.1", preferred))
             return preferred
@@ -66,17 +81,31 @@ def _open_browser_when_ready(url: str, timeout_s: float = 15.0) -> None:
 def main() -> None:
     _configure_frozen_environment()
 
-    import uvicorn
-    from fastclipper.api.app import app
+    # Porta padrão preferencial: 8000
+    preferred_port = int(os.environ.get("FASTCLIPPER_PORT", 8000))
 
-    port = int(os.environ.get("FASTCLIPPER_PORT", _pick_free_port(8000)))
+    # Se o servidor já estiver rodando nessa porta, apenas traz o navegador à frente
+    if _is_server_running(preferred_port):
+        url = f"http://127.0.0.1:{preferred_port}"
+        print(f"[INFO] Fast Clipper Studio ja esta ativo em {url}")
+        print("[INFO] Abrindo o Estudio no seu navegador...")
+        webbrowser.open(url)
+        return
+
+    port = int(os.environ.get("FASTCLIPPER_PORT", _pick_free_port(preferred_port)))
     url = f"http://127.0.0.1:{port}"
     print(f"Fast Clipper Studio iniciando em {url} ...")
     print(f"Dados salvos em: {os.environ.get('FASTCLIPPER_DATA_DIR', 'data/')}")
 
     threading.Thread(target=_open_browser_when_ready, args=(url,), daemon=True).start()
+
+    import uvicorn
+    from fastclipper.api.app import app
+
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
+
