@@ -211,3 +211,54 @@ def test_studio_render_batch_with_retention_options():
     data = res.json()
     assert data["enqueued"] == 2
     assert len(data["job_ids"]) == 2
+
+
+def test_studio_ui_api_content_type_and_url_guard():
+    """Garante que o JS de studio.html envie Content-Type application/json, formate 422 e bloqueie links em video_path."""
+    res = client.get("/")
+    assert res.status_code == 200
+    html = res.text
+    assert "if (typeof opts.body === 'string')" in html
+    assert "'Content-Type': 'application/json'" in html
+    assert "Array.isArray(detail)" in html
+    assert "isRemoteWebUrl(videoPath)" in html
+    assert "getSafeFacecamHeight()" in html
+
+
+def test_live_split_hls_stream_resolution_and_ffmpeg_args(monkeypatch):
+    """Valida suporte a lives YouTube com faixas HLS separadas de vídeo e áudio (requested_formats)."""
+    from fastclipper.live.live_manager import LiveClipSession, resolve_live_stream_url
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def extract_info(self, url, download=False):
+            return {
+                "url": None,
+                "requested_formats": [
+                    {"format_id": "312", "url": "https://manifest.googlevideo.com/video_1080p.m3u8"},
+                    {"format_id": "234", "url": "https://manifest.googlevideo.com/audio_aac.m3u8"},
+                ],
+            }
+
+    import yt_dlp
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+    resolved = resolve_live_stream_url("https://www.youtube.com/live/x50ONQrBPRM")
+    lines = resolved.splitlines()
+    assert len(lines) == 2
+    assert lines[0] == "https://manifest.googlevideo.com/video_1080p.m3u8"
+    assert lines[1] == "https://manifest.googlevideo.com/audio_aac.m3u8"
+
+    ffmpeg_args = LiveClipSession._build_ffmpeg_input_args(resolved, realtime_local=False)
+    assert ffmpeg_args.count("-i") == 2
+    assert "-map" in ffmpeg_args
+    assert "0:v:0" in ffmpeg_args
+    assert "1:a:0" in ffmpeg_args

@@ -939,6 +939,19 @@ http://127.0.0.1:8000/docs</div>
             return node;
         }
 
+        function isRemoteWebUrl(val) {
+            return /^(https?:\/\/|(www\.)?(youtube\.com|youtu\.be|twitch\.tv|x\.com|twitter\.com|kick\.com)\/)/i.test((val || '').trim());
+        }
+
+        function getSafeFacecamHeight() {
+            const hFc = document.getElementById('h-facecam');
+            const raw = hFc ? parseInt(hFc.value, 10) : 720;
+            const clamped = Math.max(200, Math.min(1720, Number.isNaN(raw) ? 720 : raw));
+            const evenVal = clamped % 2 === 0 ? clamped : clamped + 1;
+            if (hFc && String(evenVal) !== hFc.value) hFc.value = String(evenVal);
+            return evenVal;
+        }
+
         async function api(url, options = {}) {
             // fetch() com corpo string envia "text/plain" por padrao; o FastAPI so le JSON com o header correto (senao: 422).
             const headers = { ...(options.headers || {}) };
@@ -992,7 +1005,17 @@ http://127.0.0.1:8000/docs</div>
                 const raw = sessionStorage.getItem('fc_studio_state');
                 if (!raw) return;
                 const st = JSON.parse(raw);
-                if (st.video_path) document.getElementById('video_path').value = st.video_path;
+                if (st.video_path) {
+                    if (isRemoteWebUrl(st.video_path)) {
+                        const liveInput = document.getElementById('live_url');
+                        if (liveInput && !liveInput.value.trim()) {
+                            liveInput.value = /^https?:\/\//i.test(st.video_path.trim()) ? st.video_path.trim() : `https://${st.video_path.trim()}`;
+                        }
+                        document.getElementById('video_path').value = '';
+                    } else {
+                        document.getElementById('video_path').value = st.video_path;
+                    }
+                }
                 if (st.inicio_s !== undefined) document.getElementById('inicio_s').value = st.inicio_s;
                 if (st.fim_s !== undefined) document.getElementById('fim_s').value = st.fim_s;
                 if (st.subtitle_text !== undefined) document.getElementById('subtitle_text').value = st.subtitle_text;
@@ -1081,7 +1104,8 @@ http://127.0.0.1:8000/docs</div>
         }
 
         async function loadSourceVideo() {
-            const videoPath = document.getElementById('video_path').value.trim();
+            const vpInput = document.getElementById('video_path');
+            const videoPath = vpInput.value.trim();
             if (!videoPath) return;
             if (/^https?:\/\//i.test(videoPath)) {
                 setStatus('Este campo aceita apenas arquivo local. Para live ou link, use o campo "URL da live" e clique em Iniciar Live.', 'err');
@@ -1182,7 +1206,6 @@ http://127.0.0.1:8000/docs</div>
         }
 
         function currentLiveRenderOpts() {
-            const hFc = document.getElementById('h-facecam');
             const subPreset = document.getElementById('subtitle_preset');
             const ar = document.getElementById('aspect_ratio');
             const alignEl = document.getElementById('solo_align');
@@ -1194,7 +1217,7 @@ http://127.0.0.1:8000/docs</div>
                 layout: currentLayout,
                 facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
                 gameplay_rect: null,
-                stacked_facecam_height: hFc ? parseInt(hFc.value, 10) || 720 : 720,
+                stacked_facecam_height: getSafeFacecamHeight(),
                 aspect_ratio: ar ? ar.value : '9:16',
                 solo_align: alignEl ? alignEl.value : 'center',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
@@ -1723,7 +1746,7 @@ http://127.0.0.1:8000/docs</div>
                         timestamp_s: inicioS,
                         layout: currentLayout,
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        stacked_facecam_height: getSafeFacecamHeight(),
                     }),
                 });
                 const img = document.getElementById('layout-preview-img');
@@ -1768,7 +1791,7 @@ http://127.0.0.1:8000/docs</div>
                         name,
                         layout_mode: currentLayout,
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        stacked_facecam_height: getSafeFacecamHeight(),
                     }),
                 });
                 await loadPresetsList();
@@ -1926,7 +1949,7 @@ http://127.0.0.1:8000/docs</div>
                         items,
                         layout: currentLayout,
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        stacked_facecam_height: getSafeFacecamHeight(),
                         aspect_ratio: document.getElementById('aspect_ratio').value,
                         solo_align: document.getElementById('solo_align').value,
                         words: transcribedWords,
@@ -2014,7 +2037,7 @@ http://127.0.0.1:8000/docs</div>
                         fim_s: fimS,
                         layout: currentLayout,
                         facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
-                        stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
+                        stacked_facecam_height: getSafeFacecamHeight(),
                         aspect_ratio: document.getElementById('aspect_ratio').value,
                         solo_align: document.getElementById('solo_align').value,
                         subtitle_text: useRealWords ? null : editedText,

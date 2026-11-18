@@ -45,28 +45,48 @@ def _validate_public_http_url(url: str) -> None:
         pass
 
 
+def _build_yt_dlp_js_runtimes() -> Dict[str, Any]:
+    runtimes: Dict[str, Any] = {}
+    if shutil.which("deno"):
+        runtimes["deno"] = {}
+    if shutil.which("node"):
+        runtimes["node"] = {}
+    return runtimes
+
+
 def resolve_live_stream_url(page_url: str) -> str:
     """Resolve a URL de mídia (HLS/manifest) de uma live pública via yt-dlp."""
+    fmt_selector = (
+        "best[vcodec^=avc1][ext=mp4]/best[ext=mp4]/best/"
+        "bestvideo[vcodec^=avc1]+bestaudio/bestvideo+bestaudio/bestvideo"
+    )
     try:
         import yt_dlp  # type: ignore
 
-        ydl_opts = {
-            "format": "best[vcodec^=avc1][ext=mp4]/best[ext=mp4]/best",
+        ydl_opts: Dict[str, Any] = {
+            "format": fmt_selector,
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
         }
+        js_rt = _build_yt_dlp_js_runtimes()
+        if js_rt:
+            ydl_opts["js_runtimes"] = js_rt
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(page_url, download=False)
             if not info:
                 raise RuntimeError("Não foi possível extrair informações da transmissão.")
             stream_url = info.get("url")
-            if not stream_url and info.get("requested_formats"):
-                stream_url = info["requested_formats"][0].get("url")
-            if not stream_url:
-                raise RuntimeError("URL de stream ao vivo não encontrada para este link.")
-            _validate_public_http_url(stream_url)
-            return stream_url
+            if stream_url:
+                _validate_public_http_url(stream_url)
+                return stream_url
+            req_fmts = info.get("requested_formats") or []
+            urls = [f.get("url") for f in req_fmts if isinstance(f, dict) and f.get("url")]
+            if urls:
+                for u in urls[:2]:
+                    _validate_public_http_url(u)
+                return "\n".join(urls[:2])
+            raise RuntimeError("URL de stream ao vivo não encontrada para este link.")
     except ImportError:
         yt_dlp_bin = shutil.which("yt-dlp")
         if not yt_dlp_bin:
@@ -78,7 +98,7 @@ def resolve_live_stream_url(page_url: str) -> str:
                 "--no-playlist",
                 "--no-warnings",
                 "-f",
-                "best[ext=mp4]/best",
+                fmt_selector,
                 page_url,
             ],
             capture_output=True,
@@ -91,8 +111,9 @@ def resolve_live_stream_url(page_url: str) -> str:
         lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
         if not lines:
             raise RuntimeError("yt-dlp não retornou URL de stream para esta live.")
-        _validate_public_http_url(lines[0])
-        return lines[0]
+        for u in lines[:2]:
+            _validate_public_http_url(u)
+        return "\n".join(lines[:2])
 
 
 def _measure_segment_volume_db(ffmpeg_bin: str, seg_path: Path) -> Optional[float]:
@@ -211,6 +232,22 @@ class LiveClipSession:
                 except Exception:
                     pass
 
+    @staticmethod
+    def _build_ffmpeg_input_args(resolved_url: str, realtime_local: bool = False) -> List[str]:
+        urls = [u.strip() for u in (resolved_url or "").splitlines() if u.strip()]
+        if not urls:
+            raise ValueError("Nenhuma URL de stream resolvida para captura.")
+        args: List[str] = []
+        for u in urls[:2]:
+            if u.startswith(("http://", "https://")):
+                args.extend(["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5"])
+            elif realtime_local:
+                args.append("-re")
+            args.extend(["-i", u])
+        if len(urls) >= 2:
+            args.extend(["-map", "0:v:0", "-map", "1:a:0"])
+        return args
+
     def start(self) -> None:
         """Resolve o stream e inicia captura contínua em segmentos via FFmpeg."""
         resolved_url = self.stream_resolver(self.url)
@@ -221,12 +258,8 @@ class LiveClipSession:
             "-loglevel",
             "error",
         ]
-        if resolved_url.startswith(("http://", "https://")):
-            cmd.extend(["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5"])
-
+        cmd.extend(self._build_ffmpeg_input_args(resolved_url, realtime_local=False))
         cmd.extend([
-            "-i",
-            resolved_url,
             "-c",
             "copy",
             "-f",
@@ -267,14 +300,8 @@ class LiveClipSession:
             "-loglevel",
             "error",
         ]
-        if target_url.startswith(("http://", "https://")):
-            cmd.extend(["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5"])
-        else:
-            cmd.append("-re")
-
+        cmd.extend(self._build_ffmpeg_input_args(target_url, realtime_local=True))
         cmd.extend([
-            "-i",
-            target_url,
             "-vf",
             "scale=-2:480",
             "-c:v",
