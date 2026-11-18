@@ -21,13 +21,18 @@ A ideia é reduzir o tempo entre um momento interessante e um clipe pronto para 
 - **Distribuição:** planejar conexões com plataformas sociais, publicação com aprovação e acompanhamento de resultados quando as APIs permitirem.
 - **Continuidade:** acompanhar o progresso e retomar trabalhos após interrupções, aproveitando etapas e arquivos válidos.
 
-### Estado do projeto
+### Recursos disponíveis no Studio Local (`v0.3`)
 
-**Projeto em fase inicial.** O repositório contém uma base derivada do Viral Cutter Classic e uma proposta de produto. Captura ao vivo, colaboração multiusuário, publicação e comparação entre criadores ainda precisam ser implementadas e validadas. Não é uma versão pronta para produção.
+- **Central de Clipping Ao Vivo (YouTube, X/Twitter, Twitch e Kick):** monitor de vídeo ao vivo integrado no próprio Studio (`fMP4`), corte instantâneo (`M`), marcação com janela posterior (`+15s` cancelável), auto-clip por picos de áudio ou palavras-chave em dois modos (*Renderizar direto* ou *Apenas sugerir com aprovação humana*), fila em tempo real, replay do buffer para ajuste fino (`I`/`O`) e controle de manter ou descartar clipes.
+- **Formatos e enquadramentos:** exportação em `9:16` (Shorts/Reels/TikTok), `16:9` (YouTube/X) ou ambos simultaneamente, com modos `Solo 9:16` (alinhamento esquerda/centro/direita), `Encaixar 16:9` (fundo desfocado) e `Empilhado (Stacked)` com detecção de facecam, normalização `-14 LUFS` e marca d'água `@canal`.
+- **Transcrição e legendas locais:** transcrição acelerada por GPU CUDA (ou fallback CPU) via `faster-whisper` com estilos ASS animados (`Viral Bounce`, `Minimal Clean`, `Cinema Editorial`) e pacotes `.zip` prontos para publicação (`.mp4` + `.srt` + `capa.jpg` + copy).
 
-A primeira etapa prevista é auditar a base, estabelecer testes reproduzíveis e avaliar gravações autorizadas de lives de GTA V, incluindo enquadramento de gameplay e facecam. Esses testes não foram apresentados aqui como concluídos.
+### Como executar no Windows (1 clique)
 
-### Como executar (Quickstart)
+- Dê dois cliques em `iniciar.bat` (ou em `dist\FastClipper\FastClipper.exe`), ou crie o ícone na Área de Trabalho executando `criar_atalho_na_area_de_trabalho.bat`.
+- Para encerrar o servidor em segundo plano, execute `parar.bat`.
+
+### Ambiente de desenvolvimento e Build (`.exe`)
 
 ```bash
 pip install -e ".[dev,transcribe]"
@@ -36,10 +41,10 @@ python -m pytest -q
 python -m fastclipper.desktop_entry   # abre o Studio em http://127.0.0.1:8000
 ```
 
-Para gerar o executável Windows (`dist/FastClipper/FastClipper.exe`):
+Para recompilar o executável standalone Windows (`dist/FastClipper/FastClipper.exe`):
 
 ```bash
-python tools/build_exe.py
+python tools/build_exe.py --skip-tests
 ```
 
 ### Participe
