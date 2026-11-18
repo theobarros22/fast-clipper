@@ -720,22 +720,39 @@
                             <option value="cinema_editorial">Cinema Editorial (alto contraste)</option>
                         </select>
                     </div>
-                    <div class="field" style="display:flex; flex-direction:column; justify-content:center; gap:8px; margin-top:18px;">
-                        <label for="burn_subtitles" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-                            <input type="checkbox" id="burn_subtitles" style="width:17px; height:17px;">
+                    <div class="field" style="display:flex; flex-direction:column; justify-content:center; gap:8px; margin-top:8px;">
+                        <label for="burn_subtitles" style="font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="burn_subtitles" style="width:16px; height:16px;">
                             Queimar legendas no vídeo
                         </label>
-                        <label for="normalize_audio" style="font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-                            <input type="checkbox" id="normalize_audio" style="width:17px; height:17px;">
+                        <label for="progress_bar" style="font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="progress_bar" style="width:16px; height:16px;">
+                            Barra de progresso animada (retenção viral)
+                        </label>
+                        <label for="enhance_voice" style="font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="enhance_voice" style="width:16px; height:16px;">
+                            Melhorar voz (Filtro de ruído + EQ Broadcast)
+                        </label>
+                        <label for="normalize_audio" style="font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="normalize_audio" style="width:16px; height:16px;">
                             Normalizar áudio (-14 LUFS)
                         </label>
                     </div>
                 </div>
 
                 <div class="field">
-                    <label class="label" for="subtitle_text">Texto da legenda / gancho</label>
+                    <label class="label" for="hook_title">Tarja de título / gancho no topo (opcional)</label>
+                    <input type="text" id="hook_title" class="input-text" maxlength="140"
+                           placeholder="Ex: VEJA O QUE ELE DISSE AGORA (Caixa de destaque no topo)">
+                </div>
+
+                <div class="field">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label class="label" for="subtitle_text" style="margin:0;">Texto da legenda / transcrição editável</label>
+                        <button type="button" id="btn-realign-subtitles" class="chip" style="font-size:11px; padding:2px 8px;">Realinhar sincronia</button>
+                    </div>
                     <textarea id="subtitle_text" class="textarea" rows="2"
-                              placeholder="Ex: ESSA JOGADA FOI INSANA! OLHA O QUE ELE FEZ NO FINAL"></textarea>
+                              placeholder="Ex: ESSA JOGADA FOI INSANA! Edite qualquer palavra que a sincronia se ajusta automaticamente."></textarea>
                 </div>
 
                 <div class="actions-row">
@@ -954,6 +971,9 @@ http://127.0.0.1:8000/docs</div>
                     inicio_s: document.getElementById('inicio_s').value,
                     fim_s: document.getElementById('fim_s').value,
                     subtitle_text: document.getElementById('subtitle_text').value,
+                    hook_title: document.getElementById('hook_title') ? document.getElementById('hook_title').value : '',
+                    progress_bar: document.getElementById('progress_bar') ? document.getElementById('progress_bar').checked : false,
+                    enhance_voice: document.getElementById('enhance_voice') ? document.getElementById('enhance_voice').checked : false,
                     layout: currentLayout,
                 }));
             } catch (e) {}
@@ -968,6 +988,9 @@ http://127.0.0.1:8000/docs</div>
                 if (st.inicio_s !== undefined) document.getElementById('inicio_s').value = st.inicio_s;
                 if (st.fim_s !== undefined) document.getElementById('fim_s').value = st.fim_s;
                 if (st.subtitle_text !== undefined) document.getElementById('subtitle_text').value = st.subtitle_text;
+                if (st.hook_title !== undefined && document.getElementById('hook_title')) document.getElementById('hook_title').value = st.hook_title;
+                if (st.progress_bar !== undefined && document.getElementById('progress_bar')) document.getElementById('progress_bar').checked = Boolean(st.progress_bar);
+                if (st.enhance_voice !== undefined && document.getElementById('enhance_voice')) document.getElementById('enhance_voice').checked = Boolean(st.enhance_voice);
                 if (st.layout) selectLayout(st.layout);
             } catch (e) {}
         }
@@ -1152,6 +1175,9 @@ http://127.0.0.1:8000/docs</div>
             const ar = document.getElementById('aspect_ratio');
             const alignEl = document.getElementById('solo_align');
             const langEl = document.getElementById('transcribe-lang');
+            const hookEl = document.getElementById('hook_title');
+            const pbEl = document.getElementById('progress_bar');
+            const evEl = document.getElementById('enhance_voice');
             return {
                 layout: currentLayout,
                 facecam_rect: currentLayout === 'stacked' ? getFacecamRect() : null,
@@ -1160,6 +1186,9 @@ http://127.0.0.1:8000/docs</div>
                 aspect_ratio: ar ? ar.value : '9:16',
                 solo_align: alignEl ? alignEl.value : 'center',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
+                hook_title: (hookEl && hookEl.value) ? hookEl.value.trim() : null,
+                progress_bar: pbEl ? pbEl.checked : false,
+                enhance_voice: evEl ? evEl.checked : false,
                 normalize_audio: document.getElementById('normalize_audio').checked,
                 watermark_text: (document.getElementById('watermark_text').value || '').trim() || null,
                 subtitle_preset: subPreset ? subPreset.value : 'viral_bounce',
@@ -1769,6 +1798,37 @@ http://127.0.0.1:8000/docs</div>
             }
         }
 
+        async function realignSubtitlesManually() {
+            const txt = (document.getElementById('subtitle_text').value || '').trim();
+            if (!txt) return setStatus('Nenhum texto informado para sincronia.', 'warn');
+            if (!Array.isArray(transcribedWords) || transcribedWords.length === 0) {
+                return setStatus('Texto registrado. Na renderização manual sem Whisper, as palavras serão distribuídas pelo tempo do clipe.', 'idle');
+            }
+            const ini = parseFloat(document.getElementById('inicio_s').value) || 0;
+            const fim = parseFloat(document.getElementById('fim_s').value) || (ini + 30);
+            const btn = document.getElementById('btn-realign-subtitles');
+            if (btn) btn.disabled = true;
+            setStatus('Realinhando sincronia de palavras...', 'busy');
+            try {
+                const res = await api('/api/v1/studio/realign-words', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        words: transcribedWords,
+                        edited_text: txt,
+                        inicio_s: ini,
+                        fim_s: fim,
+                    }),
+                });
+                transcribedWords = res.words || [];
+                setStatus(`Sincronia realinhada: ${res.count} palavras ajustadas com precisão.`, 'idle');
+            } catch (err) {
+                setStatus(`Falha ao realinhar sincronia: ${err.message}`, 'err');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
         async function suggestMoments() {
             const videoPath = document.getElementById('video_path').value.trim();
             if (!videoPath) return setStatus('Informe o caminho do vídeo.', 'warn');
@@ -1839,6 +1899,10 @@ http://127.0.0.1:8000/docs</div>
                 return { inicio_s: s.inicio_s, fim_s: s.fim_s };
             });
 
+            const hookTitle = (document.getElementById('hook_title') ? document.getElementById('hook_title').value : '').trim();
+            const progBar = document.getElementById('progress_bar') ? document.getElementById('progress_bar').checked : false;
+            const enhVoice = document.getElementById('enhance_voice') ? document.getElementById('enhance_voice').checked : false;
+
             document.getElementById('btn-cancel-action').disabled = false;
             setStatus(`Enfileirando ${items.length} cortes em lote...`, 'busy', 5);
             try {
@@ -1857,6 +1921,9 @@ http://127.0.0.1:8000/docs</div>
                         subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
                         burn_subtitles: document.getElementById('burn_subtitles').checked,
+                        hook_title: hookTitle || null,
+                        progress_bar: progBar,
+                        enhance_voice: enhVoice,
                         normalize_audio: document.getElementById('normalize_audio').checked,
                         watermark_text: (document.getElementById('watermark_text').value || '').trim() || null,
                     }),
@@ -1920,6 +1987,11 @@ http://127.0.0.1:8000/docs</div>
             setStatus('Renderizando clipe 9:16 e validando saída...', 'busy', 40);
 
             const useRealWords = Array.isArray(transcribedWords) && transcribedWords.length > 0;
+            const hookTitle = (document.getElementById('hook_title') ? document.getElementById('hook_title').value : '').trim();
+            const progBar = document.getElementById('progress_bar') ? document.getElementById('progress_bar').checked : false;
+            const enhVoice = document.getElementById('enhance_voice') ? document.getElementById('enhance_voice').checked : false;
+            const editedText = (document.getElementById('subtitle_text').value || '').trim();
+
             try {
                 const data = await api('/api/v1/studio/render-now', {
                     method: 'POST',
@@ -1933,7 +2005,11 @@ http://127.0.0.1:8000/docs</div>
                         stacked_facecam_height: parseInt(document.getElementById('h-facecam').value, 10) || 720,
                         aspect_ratio: document.getElementById('aspect_ratio').value,
                         solo_align: document.getElementById('solo_align').value,
-                        subtitle_text: useRealWords ? null : document.getElementById('subtitle_text').value.trim(),
+                        subtitle_text: useRealWords ? null : editedText,
+                        edited_clip_text: editedText || null,
+                        hook_title: hookTitle || null,
+                        progress_bar: progBar,
+                        enhance_voice: enhVoice,
                         words: useRealWords ? transcribedWords : null,
                         subtitles_are_absolute: useRealWords,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
@@ -2167,6 +2243,14 @@ http://127.0.0.1:8000/docs</div>
             document.getElementById('inicio_s').addEventListener('input', validateCutBounds);
             document.getElementById('fim_s').addEventListener('input', validateCutBounds);
             document.getElementById('subtitle_text').addEventListener('input', saveFormState);
+            const hookTitleEl = document.getElementById('hook_title');
+            if (hookTitleEl) hookTitleEl.addEventListener('input', saveFormState);
+            const progBarEl = document.getElementById('progress_bar');
+            if (progBarEl) progBarEl.addEventListener('change', saveFormState);
+            const enhVoiceEl = document.getElementById('enhance_voice');
+            if (enhVoiceEl) enhVoiceEl.addEventListener('change', saveFormState);
+            const btnRealignEl = document.getElementById('btn-realign-subtitles');
+            if (btnRealignEl) btnRealignEl.addEventListener('click', realignSubtitlesManually);
 
             document.getElementById('btn-mark-in').addEventListener('click', () => {
                 const sp = document.getElementById('source-player');

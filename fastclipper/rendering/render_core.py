@@ -37,6 +37,8 @@ def render_vertical_ffmpeg(
     timeout_s: float = 600.0,
     cancel_event: Optional[threading.Event] = None,
     normalize_audio: bool = False,
+    enhance_voice: bool = False,
+    progress_bar: bool = False,
     watermark_text: Optional[str] = None,
     error_out: Optional[List[str]] = None,
     solo_align: str = "center",
@@ -127,6 +129,20 @@ def render_vertical_ffmpeg(
         else:
             filtro_base = f"{filtro_base},{wm_filter}"
 
+    if progress_bar:
+        bar_h = 10 if target_h >= target_w else 8
+        dur_safe = max(0.5, float(duration_s))
+        if not is_stacked:
+            filtro_base = f"[0:v]{filtro_base}[outv]"
+            is_stacked = True
+        filtro_pb = filtro_base.replace("[outv]", "[pre_pb]")
+        filtro_base = (
+            f"{filtro_pb}; "
+            f"[pre_pb]drawbox=x=0:y=ih-{bar_h}:w=iw:h={bar_h}:color=black@0.45:t=fill[pb_bg]; "
+            f"color=c=#FACC15:s={target_w}x{bar_h}:d={dur_safe:.3f}[pb_fg]; "
+            f"[pb_bg][pb_fg]overlay=x='-W+(W*t/{dur_safe:.3f})':y='H-{bar_h}':shortest=1[outv]"
+        )
+
     cwd: Optional[str] = None
     if ass_path is not None and ass_path.is_file():
         # Usa cwd na pasta do .ass e nome relativo para evitar problemas com ':' no Windows
@@ -146,7 +162,16 @@ def render_vertical_ffmpeg(
 
     enc = encoder_manager.get_encoder()
     enc_args = encoder_manager.get_encoder_args(enc, width=target_w, height=target_h)
-    audio_args = ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"] if normalize_audio else []
+    af_chain: List[str] = []
+    if enhance_voice:
+        af_chain.append(
+            "highpass=f=85,lowpass=f=14000,afftdn=nf=-25,"
+            "equalizer=f=3000:t=q:w=1.2:g=2.5,"
+            "acompressor=threshold=-18dB:ratio=3:attack=15:release=200:makeup=2"
+        )
+    if normalize_audio:
+        af_chain.append("loudnorm=I=-14:TP=-1.5:LRA=11")
+    audio_args = ["-af", ",".join(af_chain)] if af_chain else []
     resolved_out = output_path.resolve()
     full_cmd = list(cmd) + enc_args + audio_args + ["-c:a", "aac", "-b:a", "128k", str(resolved_out)]
     rc, stderr, cancelled = _run_ffmpeg_cancellable(

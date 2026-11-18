@@ -36,6 +36,8 @@ class ComparisonRenderer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.ffmpeg_bin = ffmpeg_bin or shutil.which("ffmpeg") or "ffmpeg"
         self.ffprobe_bin = ffprobe_bin or shutil.which("ffprobe") or "ffprobe"
+        from fastclipper.rendering.encoder import HardwareEncoderManager
+        self.encoder_manager = HardwareEncoderManager(ffmpeg_bin=self.ffmpeg_bin)
 
     def render_event_comparison(
         self,
@@ -110,6 +112,9 @@ class ComparisonRenderer:
                     f"subtitles='{sub_escapado}'"
                 )
 
+                enc = self.encoder_manager.get_encoder()
+                enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
+
                 cmd = [
                     self.ffmpeg_bin,
                     "-loglevel", "error",
@@ -118,9 +123,7 @@ class ComparisonRenderer:
                     "-t", str(track.duration_s),
                     "-i", str(track.video_path),
                     "-vf", filtro,
-                    "-c:v", "libx264",
-                    "-preset", "veryfast",
-                    "-pix_fmt", "yuv420p",
+                ] + enc_args + [
                     "-c:a", "aac",
                     "-b:a", "128k",
                     str(trecho_path),
@@ -190,6 +193,9 @@ class ComparisonRenderer:
                 f"[top][bot] vstack=inputs=2,subtitles='{sub_escapado}' [outv]"
             )
 
+            enc = self.encoder_manager.get_encoder()
+            enc_args = self.encoder_manager.get_encoder_args(enc, width=1080, height=1920)
+
             cmd = [
                 self.ffmpeg_bin,
                 "-loglevel", "error",
@@ -203,9 +209,7 @@ class ComparisonRenderer:
                 "-filter_complex", filtro_complexo,
                 "-map", "[outv]",
                 "-map", f"{audio_track_idx}:a",  # ÁUDIO ESTRITAMENTE DE UMA FONTE ATIVA
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-pix_fmt", "yuv420p",
+            ] + enc_args + [
                 "-c:a", "aac",
                 "-b:a", "128k",
                 str(output_path),

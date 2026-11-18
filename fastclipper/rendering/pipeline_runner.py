@@ -210,10 +210,36 @@ class PipelineRunner:
             target_height=target_h,
         )
 
-        # 3. Geração de Legendas (.ass) se houver palavras/cues
+        # 3. Geração de Legendas (.ass) e Tarja de Título/Gancho opcional
         subtitles_data = params.get("subtitles")
         subtitles_are_absolute = bool(params.get("subtitles_are_absolute", False))
+        edited_clip_text = (str(params.get("edited_clip_text") or "")).strip()
+        hook_title = (str(params.get("hook_title") or "")).strip()[:140] or None
+        burn_subs_requested = bool(params.get("burn_subtitles", True))
         ass_path: Optional[Path] = None
+        cues: List[CaptionCue] = []
+
+        if (
+            edited_clip_text
+            and isinstance(subtitles_data, list)
+            and subtitles_data
+            and all(isinstance(item, dict) and "word" in item for item in subtitles_data)
+        ):
+            orig_wt = [
+                WordTiming(
+                    word=str(item.get("word", "")),
+                    start_s=float(item.get("start_s", 0.0)),
+                    end_s=float(item.get("end_s", 0.0)),
+                )
+                for item in subtitles_data
+            ]
+            realigned_wt = self.subtitle_engine.realign_edited_words(
+                orig_wt,
+                edited_text=edited_clip_text,
+                clip_start_s=inicio_s if subtitles_are_absolute else 0.0,
+                clip_end_s=fim_s if subtitles_are_absolute else duracao_planejada,
+            )
+            subtitles_data = [{"word": w.word, "start_s": w.start_s, "end_s": w.end_s} for w in realigned_wt]
 
         if subtitles_data:
             cues = self._parse_subtitles_data(
@@ -222,21 +248,28 @@ class PipelineRunner:
                 duracao_s=duracao_planejada,
                 subtitles_are_absolute=subtitles_are_absolute,
             )
-            if cues:
-                preset_name = params.get("subtitle_preset", "viral_bounce")
-                try:
-                    preset = CaptionPreset(preset_name)
-                except ValueError:
-                    preset = CaptionPreset.VIRAL_BOUNCE
 
-                ass_content = self.subtitle_engine.generate_ass(
-                    cues, preset=preset, play_res_x=target_w, play_res_y=target_h
-                )
-                ass_path = self.output_dir / f"{job_id}_subs.ass"
-                ass_path.write_text(ass_content, encoding="utf-8")
+        if cues or hook_title:
+            preset_name = params.get("subtitle_preset", "viral_bounce")
+            try:
+                preset = CaptionPreset(preset_name)
+            except ValueError:
+                preset = CaptionPreset.VIRAL_BOUNCE
 
-        # 4. Renderização e Queima de Legenda Opcional
-        burn_subtitles = params.get("burn_subtitles", True) if ass_path else False
+            cues_to_write = cues if (burn_subs_requested or not hook_title) else []
+            ass_content = self.subtitle_engine.generate_ass(
+                cues_to_write,
+                preset=preset,
+                play_res_x=target_w,
+                play_res_y=target_h,
+                hook_title=hook_title,
+                clip_duration_s=duracao_planejada,
+            )
+            ass_path = self.output_dir / f"{job_id}_subs.ass"
+            ass_path.write_text(ass_content, encoding="utf-8")
+
+        # 4. Renderização e Queima de Legenda / Tarja / Retenção
+        burn_subtitles = bool(ass_path and (hook_title or (burn_subs_requested and bool(cues))))
         suffix = "_16x9.mp4" if is_16x9 else "_9x16.mp4"
         output_filename = params.get("output_filename") or f"{job_id}{suffix}"
         caminho_saida = self.output_dir / output_filename
@@ -250,6 +283,8 @@ class PipelineRunner:
             layout_config=layout_config,
             ass_path=ass_path if burn_subtitles else None,
             normalize_audio=bool(params.get("normalize_audio", False)),
+            enhance_voice=bool(params.get("enhance_voice", False)),
+            progress_bar=bool(params.get("progress_bar", False)),
             watermark_text=params.get("watermark_text"),
             cancel_event=cancel_event,
             error_out=ffmpeg_errors,
@@ -428,6 +463,8 @@ class PipelineRunner:
         layout_config: ChannelLayoutConfig,
         ass_path: Optional[Path] = None,
         normalize_audio: bool = False,
+        enhance_voice: bool = False,
+        progress_bar: bool = False,
         watermark_text: Optional[str] = None,
         cancel_event: Optional[threading.Event] = None,
         error_out: Optional[List[str]] = None,
@@ -446,6 +483,8 @@ class PipelineRunner:
             ass_path=ass_path,
             cancel_event=cancel_event,
             normalize_audio=normalize_audio,
+            enhance_voice=enhance_voice,
+            progress_bar=progress_bar,
             watermark_text=watermark_text,
             error_out=error_out,
             solo_align=solo_align,

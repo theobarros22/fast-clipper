@@ -140,3 +140,74 @@ def test_studio_security_guards():
 def test_studio_stream_clip_not_found():
     res = client.get("/api/v1/studio/video/arquivo_inexistente_9999.mp4")
     assert res.status_code == 404
+
+
+def test_studio_realign_words_endpoint():
+    payload = {
+        "words": [
+            {"word": "esse", "start_s": 1.0, "end_s": 1.4},
+            {"word": "jogada", "start_s": 1.45, "end_s": 1.9},
+            {"word": "foi", "start_s": 1.95, "end_s": 2.2},
+            {"word": "incrivel", "start_s": 2.25, "end_s": 2.8},
+        ],
+        "edited_text": "essa jogada foi insana",
+        "inicio_s": 1.0,
+        "fim_s": 3.0,
+    }
+    res = client.post("/api/v1/studio/realign-words", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["count"] == 4
+    words = data["words"]
+    # "jogada" e "foi" mantiveram os timestamps exatos
+    assert words[1]["word"] == "jogada" and words[1]["start_s"] == 1.45
+    assert words[2]["word"] == "foi" and words[2]["start_s"] == 1.95
+    # "essa" e "insana" foram substituídos dentro da janela de tempo correta
+    assert words[0]["word"] == "essa" and words[0]["start_s"] == 1.0
+    assert words[3]["word"] == "insana" and 2.5 <= words[3]["end_s"] <= 2.8
+
+
+def test_studio_render_retention_hook_and_progress_bar():
+    payload = {
+        "video_path": str(SYNTHETIC_VIDEO),
+        "inicio_s": 0.0,
+        "fim_s": 1.2,
+        "layout": "solo",
+        "hook_title": "VEJA ISSO AGORA",
+        "progress_bar": True,
+        "enhance_voice": True,
+        "burn_subtitles": True,
+        "subtitle_text": "RETENÇÃO VIRAL ATIVA",
+    }
+    res = client.post("/api/v1/studio/render-now", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    out_video = Path(data["output_path"])
+    assert out_video.is_file()
+
+    ass_candidates = list(out_video.parent.glob(f"{out_video.stem.replace('_9x16', '')}*_subs.ass"))
+    assert len(ass_candidates) == 1
+    ass_text = ass_candidates[0].read_text(encoding="utf-8")
+    assert "HookBanner" in ass_text
+    assert "VEJA ISSO AGORA" in ass_text
+
+
+def test_studio_render_batch_with_retention_options():
+    payload = {
+        "video_path": str(SYNTHETIC_VIDEO),
+        "items": [
+            {"inicio_s": 0.0, "fim_s": 1.0, "hook_title": "GANCHO 1"},
+            {"inicio_s": 1.0, "fim_s": 2.0},
+        ],
+        "layout": "solo",
+        "hook_title": "GANCHO PADRAO",
+        "progress_bar": True,
+        "enhance_voice": True,
+        "burn_subtitles": False,
+    }
+    res = client.post("/api/v1/studio/render-batch", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["enqueued"] == 2
+    assert len(data["job_ids"]) == 2

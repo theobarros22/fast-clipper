@@ -42,6 +42,8 @@ from fastclipper.rendering.pipeline_runner import PipelineRunner
 from fastclipper.signals.moment_suggester import MomentSuggester
 from fastclipper.social.oauth_vault import OAuthTokenVault, SocialPlatform
 from fastclipper.storage.sqlite_store import SQLiteStore, SQLiteTaskQueue
+from fastclipper.subtitles.engine import SubtitleEngine
+from fastclipper.subtitles.models import WordTiming
 from fastclipper.transcribe.whisper_service import WhisperTranscriptionService
 
 BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])).resolve()
@@ -132,6 +134,7 @@ live_manager = LiveManager(
     transcribe_fn=lambda path, lang: whisper_service.transcribe(media_path=path, language=lang, save_to_cache=False),
 )
 package_exporter = PackageExporter(exports_root=DATA_DIR / "exports")
+subtitle_engine = SubtitleEngine()
 
 # Registra organização e usuário padrão para demonstração imediata
 collab_service.register_organization(org_id="org_default", nome="Agência Alfa", slug="alfa")
@@ -243,10 +246,14 @@ class StudioRenderRequest(BaseModel):
     aspect_ratio: str = "9:16"
     solo_align: Literal["left", "center", "right"] = "center"
     subtitle_text: Optional[str] = None
+    edited_clip_text: Optional[str] = None
+    hook_title: Optional[str] = None
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
+    progress_bar: bool = False
+    enhance_voice: bool = False
     normalize_audio: bool = False
     watermark_text: Optional[str] = None
 
@@ -297,6 +304,9 @@ class LiveStartRequest(BaseModel):
     aspect_ratio: str = "9:16"
     solo_align: Literal["left", "center", "right"] = "center"
     burn_subtitles: bool = False
+    hook_title: Optional[str] = None
+    progress_bar: bool = False
+    enhance_voice: bool = False
     subtitle_preset: str = "minimal_clean"
     language: str = "pt"
     normalize_audio: bool = False
@@ -324,6 +334,9 @@ class LiveMarkRequest(BaseModel):
     aspect_ratio: Optional[str] = None
     solo_align: Optional[Literal["left", "center", "right"]] = None
     burn_subtitles: Optional[bool] = None
+    hook_title: Optional[str] = None
+    progress_bar: Optional[bool] = None
+    enhance_voice: Optional[bool] = None
     subtitle_preset: Optional[str] = None
     language: Optional[str] = None
     normalize_audio: Optional[bool] = None
@@ -352,10 +365,20 @@ class LiveSettingsRequest(BaseModel):
     aspect_ratio: Optional[str] = None
     solo_align: Optional[Literal["left", "center", "right"]] = None
     burn_subtitles: Optional[bool] = None
+    hook_title: Optional[str] = None
+    progress_bar: Optional[bool] = None
+    enhance_voice: Optional[bool] = None
     subtitle_preset: Optional[str] = None
     language: Optional[str] = None
     normalize_audio: Optional[bool] = None
     watermark_text: Optional[str] = None
+
+
+class RealignWordsRequest(BaseModel):
+    words: List[Dict[str, Any]]
+    edited_text: str
+    inicio_s: float = Field(0.0, ge=0.0)
+    fim_s: Optional[float] = Field(None, gt=0.0)
 
 
 class LiveReplayRequest(BaseModel):
@@ -406,6 +429,8 @@ class SuggestMomentsRequest(BaseModel):
 class BatchRenderItem(BaseModel):
     inicio_s: float = Field(ge=0.0)
     fim_s: float = Field(gt=0.0)
+    hook_title: Optional[str] = None
+    edited_clip_text: Optional[str] = None
 
     @model_validator(mode="after")
     def _val_bounds(self) -> "BatchRenderItem":
@@ -427,6 +452,9 @@ class BatchRenderRequest(BaseModel):
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
     burn_subtitles: bool = True
+    hook_title: Optional[str] = None
+    progress_bar: bool = False
+    enhance_voice: bool = False
     normalize_audio: bool = False
     watermark_text: Optional[str] = None
 
@@ -1001,6 +1029,30 @@ def studio_suggest_moments(req: SuggestMomentsRequest):
     }
 
 
+@app.post("/api/v1/studio/realign-words", tags=["Studio"])
+def studio_realign_words(req: RealignWordsRequest):
+    """Realinha timestamps de palavras quando o operador edita o texto transcrito."""
+    parsed_words = [
+        WordTiming(
+            word=str(w.get("word", "")),
+            start_s=float(w.get("start_s", 0.0)),
+            end_s=float(w.get("end_s", 0.0)),
+        )
+        for w in req.words
+        if w.get("word") is not None
+    ]
+    realigned = subtitle_engine.realign_edited_words(
+        words=parsed_words,
+        edited_text=req.edited_text,
+        clip_start_s=req.inicio_s,
+        clip_end_s=req.fim_s,
+    )
+    return {
+        "words": [w.to_dict() for w in realigned],
+        "count": len(realigned),
+    }
+
+
 @app.post("/api/v1/studio/render-batch", tags=["Studio"])
 def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTasks):
     """Enfileira vários cortes na fila SQLite e dispara o worker em background."""
@@ -1024,6 +1076,10 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "subtitles_are_absolute": req.subtitles_are_absolute,
             "subtitle_preset": req.subtitle_preset,
             "burn_subtitles": req.burn_subtitles,
+            "hook_title": item.hook_title or req.hook_title,
+            "edited_clip_text": item.edited_clip_text,
+            "progress_bar": req.progress_bar,
+            "enhance_voice": req.enhance_voice,
             "normalize_audio": req.normalize_audio,
             "watermark_text": req.watermark_text,
         }
@@ -1119,6 +1175,9 @@ def studio_live_update_settings(req: LiveSettingsRequest):
         "aspect_ratio",
         "solo_align",
         "burn_subtitles",
+        "hook_title",
+        "progress_bar",
+        "enhance_voice",
         "subtitle_preset",
         "language",
         "normalize_audio",
@@ -1151,6 +1210,9 @@ def studio_live_mark(req: LiveMarkRequest):
         "aspect_ratio",
         "solo_align",
         "burn_subtitles",
+        "hook_title",
+        "progress_bar",
+        "enhance_voice",
         "subtitle_preset",
         "language",
         "normalize_audio",
@@ -1198,6 +1260,9 @@ def studio_live_approve_suggestion(suggestion_id: str, req: Optional[LiveSetting
             "aspect_ratio",
             "solo_align",
             "burn_subtitles",
+            "hook_title",
+            "progress_bar",
+            "enhance_voice",
             "subtitle_preset",
             "language",
             "normalize_audio",
@@ -1382,6 +1447,10 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,
         "burn_subtitles": req.burn_subtitles,
+        "edited_clip_text": req.edited_clip_text,
+        "hook_title": req.hook_title,
+        "progress_bar": req.progress_bar,
+        "enhance_voice": req.enhance_voice,
         "normalize_audio": req.normalize_audio,
         "watermark_text": req.watermark_text,
     }

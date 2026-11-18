@@ -634,6 +634,9 @@ class LiveClipSession:
                 "subtitles_are_absolute": False,
                 "subtitle_preset": opts.get("subtitle_preset", "minimal_clean"),
                 "burn_subtitles": burn_subs and bool(subtitles_words),
+                "hook_title": opts.get("hook_title"),
+                "enhance_voice": bool(opts.get("enhance_voice", False)),
+                "progress_bar": bool(opts.get("progress_bar", False)),
                 "normalize_audio": bool(opts.get("normalize_audio", False)),
                 "watermark_text": opts.get("watermark_text"),
             }
