@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Header, Query, Request, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fastclipper.collaboration.models import AuthContext, EstadoMomento, PapelUsuario
@@ -286,6 +286,7 @@ class LiveStartRequest(BaseModel):
     segment_duration_s: float = 10.0
     retention_seconds: float = 1800.0
     auto_clip: bool = False
+    auto_clip_mode: Literal["auto_render", "suggest_only"] = "auto_render"
     auto_clip_duration_s: float = 25.0
     auto_clip_threshold_db: float = -12.0
     auto_clip_keywords: List[str] = []
@@ -294,6 +295,7 @@ class LiveStartRequest(BaseModel):
     gameplay_rect: Optional[Dict[str, Any]] = None
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
+    solo_align: Literal["left", "center", "right"] = "center"
     burn_subtitles: bool = False
     subtitle_preset: str = "minimal_clean"
     language: str = "pt"
@@ -320,6 +322,7 @@ class LiveMarkRequest(BaseModel):
     gameplay_rect: Optional[Dict[str, Any]] = None
     stacked_facecam_height: Optional[int] = None
     aspect_ratio: Optional[str] = None
+    solo_align: Optional[Literal["left", "center", "right"]] = None
     burn_subtitles: Optional[bool] = None
     subtitle_preset: Optional[str] = None
     language: Optional[str] = None
@@ -335,6 +338,30 @@ class LiveMarkRequest(BaseModel):
     @classmethod
     def _val_preset(cls, v: Optional[str]) -> Optional[str]:
         return _check_subtitle_preset(v) if v is not None else None
+
+
+class LiveSettingsRequest(BaseModel):
+    auto_clip: Optional[bool] = None
+    auto_clip_mode: Optional[Literal["auto_render", "suggest_only"]] = None
+    auto_clip_threshold_db: Optional[float] = None
+    auto_clip_keywords: Optional[List[str]] = None
+    layout: Optional[str] = None
+    facecam_rect: Optional[Dict[str, Any]] = None
+    gameplay_rect: Optional[Dict[str, Any]] = None
+    stacked_facecam_height: Optional[int] = None
+    aspect_ratio: Optional[str] = None
+    solo_align: Optional[Literal["left", "center", "right"]] = None
+    burn_subtitles: Optional[bool] = None
+    subtitle_preset: Optional[str] = None
+    language: Optional[str] = None
+    normalize_audio: Optional[bool] = None
+    watermark_text: Optional[str] = None
+
+
+class LiveReplayRequest(BaseModel):
+    inicio_s: Optional[float] = Field(None, ge=0.0)
+    fim_s: Optional[float] = Field(None, gt=0.0)
+    duration_s: float = Field(45.0, ge=3.0, le=1800.0)
 
 
 class TranscribeRequest(BaseModel):
@@ -691,7 +718,7 @@ def stream_studio_clip(filename: str):
 
 @app.delete("/api/v1/studio/clips/{filename}", tags=["Studio"])
 def delete_studio_clip(filename: str):
-    """Remove um clipe renderizado do diretório de saída."""
+    """Remove um clipe renderizado do diretório de saída (e limpa registro da live se houver)."""
     if not filename or "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=403, detail="Nome de arquivo inválido.")
     out_dir = pipeline_runner.output_dir.resolve()
@@ -701,6 +728,10 @@ def delete_studio_clip(filename: str):
     if not caminho.is_file():
         raise HTTPException(status_code=404, detail="Clipe não encontrado.")
     caminho.unlink()
+    ass_companion = (out_dir / f"{caminho.stem}_subs.ass").resolve()
+    if ass_companion.parent == out_dir and ass_companion.is_file():
+        ass_companion.unlink(missing_ok=True)
+    live_manager.remove_clip_entry(filename)
     return {"deleted": True, "filename": filename}
 
 
@@ -1021,7 +1052,7 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
 
 @app.post("/api/v1/studio/live/start", tags=["Studio Live"])
 def studio_live_start(req: LiveStartRequest):
-    """Inicia captura contínua ao vivo (YouTube Live ou X/Twitter Live) em buffer segmentado."""
+    """Inicia captura contínua ao vivo (YouTube, X, Twitch ou Kick) em buffer segmentado."""
     try:
         render_opts = {
             "layout": req.layout,
@@ -1029,6 +1060,7 @@ def studio_live_start(req: LiveStartRequest):
             "gameplay_rect": req.gameplay_rect,
             "stacked_facecam_height": req.stacked_facecam_height,
             "aspect_ratio": req.aspect_ratio,
+            "solo_align": req.solo_align,
             "burn_subtitles": req.burn_subtitles,
             "subtitle_preset": req.subtitle_preset,
             "language": req.language,
@@ -1040,6 +1072,7 @@ def studio_live_start(req: LiveStartRequest):
             segment_duration_s=req.segment_duration_s,
             retention_seconds=req.retention_seconds,
             auto_clip=req.auto_clip,
+            auto_clip_mode=req.auto_clip_mode,
             auto_clip_duration_s=req.auto_clip_duration_s,
             auto_clip_threshold_db=req.auto_clip_threshold_db,
             auto_clip_keywords=req.auto_clip_keywords,
@@ -1054,34 +1087,78 @@ def studio_live_start(req: LiveStartRequest):
 
 @app.get("/api/v1/studio/live/status", tags=["Studio Live"])
 def studio_live_status():
-    """Retorna o estado atual da transmissão ao vivo e clipes gerados."""
+    """Retorna o estado atual da transmissão ao vivo, fila ativa e clipes gerados."""
     return live_manager.get_status()
+
+
+@app.get("/api/v1/studio/live/stream.mp4", tags=["Studio Live"])
+def studio_live_monitor_stream():
+    """Transmite a live em MP4 fragmentado (fMP4) para o monitor integrado no Studio."""
+    session = live_manager.current_session
+    if not session or not session.running:
+        raise HTTPException(status_code=404, detail="Nenhuma transmissão ao vivo ativa no momento.")
+    return StreamingResponse(
+        session.iter_preview_fmp4(),
+        media_type="video/mp4",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+@app.patch("/api/v1/studio/live/settings", tags=["Studio Live"])
+def studio_live_update_settings(req: LiveSettingsRequest):
+    """Atualiza modo de auto-clipping, gatilhos e opções de renderização sem interromper a captura."""
+    render_opts: Dict[str, Any] = {}
+    for key in (
+        "layout",
+        "facecam_rect",
+        "gameplay_rect",
+        "stacked_facecam_height",
+        "aspect_ratio",
+        "solo_align",
+        "burn_subtitles",
+        "subtitle_preset",
+        "language",
+        "normalize_audio",
+        "watermark_text",
+    ):
+        val = getattr(req, key)
+        if val is not None:
+            render_opts[key] = val
+    try:
+        return live_manager.update_settings(
+            auto_clip=req.auto_clip,
+            auto_clip_mode=req.auto_clip_mode,
+            auto_clip_threshold_db=req.auto_clip_threshold_db,
+            auto_clip_keywords=req.auto_clip_keywords,
+            default_render_opts=render_opts or None,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/api/v1/studio/live/mark", tags=["Studio Live"])
 def studio_live_mark(req: LiveMarkRequest):
     """Cria um corte instantâneo dos últimos segundos do buffer ou agenda marcação com janela posterior."""
     render_opts: Dict[str, Any] = {}
-    if req.layout is not None:
-        render_opts["layout"] = req.layout
-    if req.facecam_rect is not None:
-        render_opts["facecam_rect"] = req.facecam_rect
-    if req.gameplay_rect is not None:
-        render_opts["gameplay_rect"] = req.gameplay_rect
-    if req.stacked_facecam_height is not None:
-        render_opts["stacked_facecam_height"] = req.stacked_facecam_height
-    if req.aspect_ratio is not None:
-        render_opts["aspect_ratio"] = req.aspect_ratio
-    if req.burn_subtitles is not None:
-        render_opts["burn_subtitles"] = req.burn_subtitles
-    if req.subtitle_preset is not None:
-        render_opts["subtitle_preset"] = req.subtitle_preset
-    if req.language is not None:
-        render_opts["language"] = req.language
-    if req.normalize_audio is not None:
-        render_opts["normalize_audio"] = req.normalize_audio
-    if req.watermark_text is not None:
-        render_opts["watermark_text"] = req.watermark_text
+    for key in (
+        "layout",
+        "facecam_rect",
+        "gameplay_rect",
+        "stacked_facecam_height",
+        "aspect_ratio",
+        "solo_align",
+        "burn_subtitles",
+        "subtitle_preset",
+        "language",
+        "normalize_audio",
+        "watermark_text",
+    ):
+        val = getattr(req, key)
+        if val is not None:
+            render_opts[key] = val
 
     try:
         return live_manager.mark_clip(
@@ -1090,6 +1167,97 @@ def studio_live_mark(req: LiveMarkRequest):
             titulo=req.titulo,
             render_opts=render_opts or None,
         )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/studio/live/pending/{candidate_id}/cancel", tags=["Studio Live"])
+def studio_live_cancel_pending(candidate_id: str):
+    """Cancela uma marcação ao vivo que estava aguardando janela posterior (+15s)."""
+    session = live_manager.current_session
+    if not session:
+        raise HTTPException(status_code=404, detail="Nenhuma sessão ao vivo encontrada.")
+    if not session.cancel_pending_mark(candidate_id):
+        raise HTTPException(status_code=404, detail="Marcação pendente não encontrada ou já processada.")
+    return {"cancelled": True, "candidate_id": candidate_id}
+
+
+@app.post("/api/v1/studio/live/suggestions/{suggestion_id}/approve", tags=["Studio Live"])
+def studio_live_approve_suggestion(suggestion_id: str, req: Optional[LiveSettingsRequest] = None):
+    """Aprova uma sugestão de corte automático e enfileira sua renderização."""
+    session = live_manager.current_session
+    if not session:
+        raise HTTPException(status_code=404, detail="Nenhuma sessão ao vivo encontrada.")
+    render_opts: Dict[str, Any] = {}
+    if req is not None:
+        for key in (
+            "layout",
+            "facecam_rect",
+            "gameplay_rect",
+            "stacked_facecam_height",
+            "aspect_ratio",
+            "solo_align",
+            "burn_subtitles",
+            "subtitle_preset",
+            "language",
+            "normalize_audio",
+            "watermark_text",
+        ):
+            val = getattr(req, key)
+            if val is not None:
+                render_opts[key] = val
+    try:
+        return session.approve_suggestion(suggestion_id, render_opts=render_opts or None)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/studio/live/suggestions/{suggestion_id}/dismiss", tags=["Studio Live"])
+def studio_live_dismiss_suggestion(suggestion_id: str):
+    """Descarta uma sugestão automática da live sem renderizar."""
+    session = live_manager.current_session
+    if not session or not session.dismiss_suggestion(suggestion_id):
+        raise HTTPException(status_code=404, detail="Sugestão não encontrada.")
+    return {"dismissed": True, "suggestion_id": suggestion_id}
+
+
+@app.post("/api/v1/studio/live/clips/{filename}/approve", tags=["Studio Live"])
+def studio_live_approve_clip(filename: str):
+    """Marca um clipe gerado na live como aprovado/mantido."""
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=403, detail="Nome de arquivo inválido.")
+    session = live_manager.current_session
+    if not session or not session.approve_clip(filename):
+        raise HTTPException(status_code=404, detail="Clipe não encontrado na sessão ao vivo.")
+    return {"approved": True, "filename": filename}
+
+
+@app.post("/api/v1/studio/live/replay", tags=["Studio Live"])
+def studio_live_extract_replay(req: LiveReplayRequest):
+    """Extrai um trecho bruto do buffer da live para o player principal do Studio (ajuste fino I/O)."""
+    session = live_manager.current_session
+    if not session:
+        raise HTTPException(status_code=404, detail="Nenhuma sessão ao vivo disponível.")
+    dest_dir = (vod_ingestor.projects_root / "proj_default" / "source").resolve()
+    try:
+        info = session.export_buffer_replay(
+            dest_dir=dest_dir,
+            inicio_s=req.inicio_s,
+            fim_s=req.fim_s,
+            duration_s=req.duration_s,
+        )
+        try:
+            vod_ingestor.import_local_file(
+                file_path=Path(info["file_path"]),
+                authorization_ref="LIVE-BUFFER-REPLAY",
+                project_id="proj_default",
+                title=f"Replay Live ({info['inicio_s']}s–{info['fim_s']}s)",
+            )
+        except Exception:
+            pass
+        return info
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

@@ -141,9 +141,19 @@ def test_studio_live_api_endpoints():
     assert "btn-live-start" in home.text
     assert "live_keywords" in home.text
     assert "live_clip_duration" in home.text
+    assert "live-monitor-player" in home.text
+    assert "live_autoclip_mode" in home.text
+    assert "btn-live-replay-buffer" in home.text
+    assert "live-queue-wrap" in home.text
+    assert "live-clips-feed-wrap" in home.text
     assert "btn-cleanup-live" in home.text
     assert "btn-copy-export-text" in home.text
     assert "innerHTML" not in home.text
+    assert "alert(" not in home.text
+
+    # Sem live ativa, stream de monitor retorna 404
+    no_stream = client.get("/api/v1/studio/live/stream.mp4")
+    assert no_stream.status_code == 404
 
     storage = client.get("/api/v1/studio/storage")
     assert storage.status_code == 200
@@ -173,3 +183,86 @@ def test_live_auto_clip_keywords_trigger(tmp_path):
     triggered = session._evaluate_auto_clip_trigger(seg_file)
     assert triggered == "Auto Palavra: absurdo"
     assert "ABSURDO" in session.last_transcript_snippet
+
+
+def test_live_control_flow_preview_suggestions_replay_and_discard(tmp_path):
+    if not FIXTURE_VIDEO.exists():
+        pytest.skip("Fixture sintética não gerada.")
+
+    queue = DurableTaskQueue()
+    out_dir = tmp_path / "clips_ctrl"
+    runner = PipelineRunner(queue=queue, output_dir=out_dir)
+
+    session = LiveClipSession(
+        session_id="live_ctrl_01",
+        url="https://www.twitch.tv/streamer",
+        session_dir=tmp_path / "live_ctrl_sess",
+        pipeline_runner=runner,
+        segment_duration_s=2.0,
+        auto_clip=True,
+        auto_clip_mode="suggest_only",
+        auto_clip_threshold_db=10.0,
+        auto_clip_keywords=["urgente"],
+        default_render_opts={"layout": "solo", "solo_align": "center"},
+        stream_resolver=lambda _: str(FIXTURE_VIDEO.resolve()),
+        transcribe_fn=lambda _p, _l: {"full_text": "Plantão urgente ao vivo", "words": []},
+    )
+    session.start()
+    try:
+        # 1. Monitor ao vivo em fMP4 produz cabeçalho MP4 válido (ftyp/moov)
+        gen = session.iter_preview_fmp4(chunk_size=8192)
+        first_chunk = next(gen)
+        gen.close()
+        assert len(first_chunk) > 0
+        assert b"ftyp" in first_chunk or b"moov" in first_chunk
+
+        # Aguarda segmentos no buffer
+        deadline = time.time() + 15.0
+        while time.time() < deadline:
+            session._scan_new_segments(include_last=not session.running)
+            if len(session.buffer) >= 1 and (not session.running or len(session.buffer) >= 2):
+                break
+            time.sleep(0.3)
+        assert len(session.buffer) >= 1
+
+        # 2. Marcação com post_window (+15s) pode ser visualizada e cancelada
+        pending = session.mark_and_clip(pre_s=2.0, post_s=60.0, titulo="Aguardando Fim")
+        assert pending["mode"] == "post_window"
+        st1 = session.get_status()
+        assert any(p["candidate_id"] == pending["candidate_id"] for p in st1["pending_items"])
+        assert session.cancel_pending_mark(pending["candidate_id"]) is True
+        st2 = session.get_status()
+        assert not any(p["candidate_id"] == pending["candidate_id"] for p in st2["pending_items"])
+
+        # 3. Modo suggest_only cria sugestões que podem ser ignoradas ou aprovadas
+        seg0 = session.segments_dir / "seg_00000.ts"
+        session._last_auto_clip_s = -999.0
+        session._async_auto_clip_check(seg0, session.clock.current_time())
+        st3 = session.get_status()
+        assert len(st3["suggested_cuts"]) >= 1
+        sug_id = st3["suggested_cuts"][0]["suggestion_id"]
+
+        approved = session.approve_suggestion(sug_id, background=False)
+        assert approved["status"] == "done"
+        fname = approved["filename"]
+        assert (out_dir / fname).is_file()
+
+        # 4. Aprovar / manter clipe e remover do feed
+        assert session.approve_clip(fname) is True
+        assert session.get_status()["recent_clips"][-1]["approved"] is True
+
+        # 5. Extrair replay bruto do buffer para corte fino no player principal
+        replay = session.export_buffer_replay(dest_dir=tmp_path / "replays", duration_s=4.0)
+        assert Path(replay["file_path"]).is_file()
+        assert replay["duration_s"] >= 1.0
+
+        # 6. Atualização dinâmica das regras em tempo real
+        st4 = session.update_settings(auto_clip=False, auto_clip_mode="auto_render", auto_clip_keywords=["gol"])
+        assert st4["auto_clip"] is False
+        assert st4["auto_clip_mode"] == "auto_render"
+        assert st4["auto_clip_keywords"] == ["gol"]
+
+        assert session.remove_clip_entry(fname) is True
+        assert len(session.get_status()["recent_clips"]) == 0
+    finally:
+        session.stop()

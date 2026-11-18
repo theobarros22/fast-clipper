@@ -319,6 +319,68 @@
             border-radius: var(--radius-sm);
         }
         .details-box summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--sub); }
+        .live-monitor-box {
+            background: #07090C;
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            padding: 10px;
+            margin-top: 4px;
+        }
+        .live-monitor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            background: rgba(239, 68, 68, 0.16);
+            color: #F87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+        .live-badge .dot-live {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #EF4444;
+        }
+        .live-subpanel {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            padding: 10px;
+        }
+        .live-subpanel-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--sub);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .pill-tag {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 999px;
+            margin-right: 6px;
+        }
+        .pill-active { background: rgba(96, 165, 250, 0.18); color: #93C5FD; }
+        .pill-wait { background: rgba(245, 158, 11, 0.18); color: #FCD34D; }
+        .pill-saved { background: rgba(34, 197, 94, 0.18); color: #86EFAC; }
+        .pill-new { background: rgba(96, 165, 250, 0.15); color: #60A5FA; }
         .stacked-box {
             display: none;
             margin-top: 12px;
@@ -436,8 +498,8 @@
                     </div>
                 </div>
 
-                <details class="details-box" id="live-clipper-box">
-                    <summary>Clipar transmissão ao vivo (YouTube / X / Twitch / Kick)</summary>
+                <details class="details-box" id="live-clipper-box" open>
+                    <summary>Central de Clipping Ao Vivo (YouTube / X / Twitch / Kick)</summary>
                     <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
                         <div class="row-2">
                             <div>
@@ -445,21 +507,43 @@
                                 <input type="text" id="live_url" class="input-text" placeholder="https://www.youtube.com/watch?v=... ou https://x.com/... ou https://twitch.tv/...">
                             </div>
                             <div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap;">
-                                <label class="checkbox-row" style="margin:0 4px 6px 0;">
-                                    <input type="checkbox" id="live_autoclip"> Auto-clipar picos
-                                </label>
-                                <select id="live_threshold_db" aria-label="Sensibilidade do pico de áudio" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
-                                    <option value="-8">Pico alto (-8 dB)</option>
-                                    <option value="-12" selected>Padrão (-12 dB)</option>
-                                    <option value="-18">Sensível (-18 dB)</option>
-                                </select>
                                 <button type="button" id="btn-live-start" class="btn-sec">Iniciar Live</button>
                                 <button type="button" id="btn-live-stop" class="chip" disabled>Parar</button>
+                                <button type="button" id="btn-live-toggle-monitor" class="chip" disabled>Reconectar Monitor</button>
                             </div>
                         </div>
+
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <label class="checkbox-row" style="margin:0;">
+                                <input type="checkbox" id="live_autoclip"> Auto-clipar
+                            </label>
+                            <select id="live_autoclip_mode" aria-label="Modo de controle do auto-clip" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
+                                <option value="auto_render" selected>Renderizar direto (descartar o que não quiser)</option>
+                                <option value="suggest_only">Apenas sugerir (aprovar antes de renderizar)</option>
+                            </select>
+                            <select id="live_threshold_db" aria-label="Sensibilidade do pico de áudio" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
+                                <option value="-8">Pico alto (-8 dB)</option>
+                                <option value="-12" selected>Padrão (-12 dB)</option>
+                                <option value="-18">Sensível (-18 dB)</option>
+                            </select>
+                        </div>
+
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <input type="text" id="live_keywords" aria-label="Palavras-chave para auto-clip ao vivo" class="input-text" style="flex:1; min-width:220px;" placeholder="Palavras-chave auto-clip (ex: absurdo, olha isso, urgente)">
+                            <button type="button" id="btn-live-apply-settings" class="chip" disabled>Atualizar Regras ao Vivo</button>
                         </div>
+
+                        <div id="live-monitor-wrap" class="live-monitor-box" style="display:none;">
+                            <div class="live-monitor-header">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span class="live-badge"><span class="dot-live"></span>AO VIVO</span>
+                                    <span id="live-monitor-meta" style="font-size:12px; color:var(--sub);">Conectando ao stream...</span>
+                                </div>
+                                <span id="live-transcript-ticker" style="font-size:11.5px; color:var(--muted); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+                            </div>
+                            <video id="live-monitor-player" controls playsinline preload="none" style="width:100%; max-height:290px; background:#000; border-radius:8px; display:block;"></video>
+                        </div>
+
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <select id="live_clip_duration" aria-label="Duração do corte ao vivo" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
                                 <option value="15">15s</option>
@@ -469,7 +553,24 @@
                             </select>
                             <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s (M)</button>
                             <button type="button" id="btn-live-mark-post" class="chip" disabled>Marcar Agora (+15s)</button>
-                            <span id="live-status-text" aria-live="polite" style="font-size:12px; color:var(--text-muted);">Nenhuma live ativa.</span>
+                            <button type="button" id="btn-live-replay-buffer" class="chip" disabled title="Puxa os últimos 45s brutos para o player principal ajustar I/O com precisão">Puxar 45s p/ Corte Fino (I/O)</button>
+                            <span id="live-status-text" aria-live="polite" style="font-size:12px; color:var(--sub);">Nenhuma live ativa.</span>
+                        </div>
+
+                        <div id="live-queue-wrap" class="live-subpanel" aria-live="polite" style="display:none;">
+                            <div class="live-subpanel-title">
+                                <span>Em corte / Aguardando aprovação</span>
+                                <span id="live-queue-count" style="font-size:11px; color:var(--muted);">0</span>
+                            </div>
+                            <div id="live-queue-list"></div>
+                        </div>
+
+                        <div id="live-clips-feed-wrap" class="live-subpanel" style="display:none;">
+                            <div class="live-subpanel-title">
+                                <span>Clipes gerados nesta live (Controle do que fica salvo)</span>
+                                <span id="live-clips-feed-count" style="font-size:11px; color:var(--muted);">0</span>
+                            </div>
+                            <div id="live-clips-feed-list"></div>
                         </div>
                     </div>
                 </details>
@@ -1035,11 +1136,21 @@ http://127.0.0.1:8000/docs</div>
 
         let livePollTimer = null;
         let lastLiveClipsCount = 0;
+        let liveMonitorSessionId = null;
+        let liveRunningState = false;
+
+        function fmtClock(sec) {
+            const s = Math.max(0, Math.floor(Number(sec) || 0));
+            const m = Math.floor(s / 60);
+            const r = s % 60;
+            return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+        }
 
         function currentLiveRenderOpts() {
             const hFc = document.getElementById('h-facecam');
             const subPreset = document.getElementById('subtitle_preset');
             const ar = document.getElementById('aspect_ratio');
+            const alignEl = document.getElementById('solo_align');
             const langEl = document.getElementById('transcribe-lang');
             return {
                 layout: currentLayout,
@@ -1047,6 +1158,7 @@ http://127.0.0.1:8000/docs</div>
                 gameplay_rect: null,
                 stacked_facecam_height: hFc ? parseInt(hFc.value, 10) || 720 : 720,
                 aspect_ratio: ar ? ar.value : '9:16',
+                solo_align: alignEl ? alignEl.value : 'center',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
                 normalize_audio: document.getElementById('normalize_audio').checked,
                 watermark_text: (document.getElementById('watermark_text').value || '').trim() || null,
@@ -1055,30 +1167,309 @@ http://127.0.0.1:8000/docs</div>
             };
         }
 
+        function connectLiveMonitor(sessionId, forceReload = false) {
+            const wrap = document.getElementById('live-monitor-wrap');
+            const player = document.getElementById('live-monitor-player');
+            if (!wrap || !player) return;
+            wrap.style.display = 'block';
+            if (!forceReload && liveMonitorSessionId === sessionId && player.getAttribute('src')) {
+                return;
+            }
+            liveMonitorSessionId = sessionId || 'active';
+            const streamUrl = `/api/v1/studio/live/stream.mp4?sid=${encodeURIComponent(liveMonitorSessionId)}&t=${Date.now()}`;
+            player.src = streamUrl;
+            player.load();
+            player.play().catch(() => {
+                player.muted = true;
+                player.play().catch(() => {});
+            });
+        }
+
+        function stopLiveMonitor() {
+            const wrap = document.getElementById('live-monitor-wrap');
+            const player = document.getElementById('live-monitor-player');
+            liveMonitorSessionId = null;
+            if (player) {
+                try { player.pause(); } catch (_) {}
+                player.removeAttribute('src');
+                player.load();
+            }
+            if (wrap) wrap.style.display = 'none';
+        }
+
+        function renderLiveQueueSection(st) {
+            const wrap = document.getElementById('live-queue-wrap');
+            const list = document.getElementById('live-queue-list');
+            const countEl = document.getElementById('live-queue-count');
+            if (!wrap || !list) return;
+
+            const activeCuts = (st && st.active_cuts) || [];
+            const pendingItems = (st && st.pending_items) || [];
+            const suggestedCuts = (st && st.suggested_cuts) || [];
+            const total = activeCuts.length + pendingItems.length + suggestedCuts.length;
+
+            list.textContent = '';
+            if (countEl) countEl.textContent = `${total} item(ns)`;
+            if (total === 0) {
+                wrap.style.display = 'none';
+                return;
+            }
+            wrap.style.display = 'block';
+
+            const stageLabels = {
+                aguardando_fila: 'Na fila de render...',
+                extraindo_buffer: 'Extraindo do buffer...',
+                transcrevendo: 'Gerando legenda (Whisper)...',
+                renderizando: 'Renderizando vídeo...',
+            };
+
+            for (const c of activeCuts) {
+                const badge = el('span', { className: 'pill-tag pill-active', textContent: stageLabels[c.stage] || 'Cortando...' });
+                const title = el('strong', { textContent: `${c.titulo || 'Corte'} (${fmtClock(c.inicio_s)} → ${fmtClock(c.fim_s)})` });
+                const meta = el('div', { className: 'suggestion-meta', textContent: `Tempo decorrido: ${fmtNum(c.elapsed_s || 0, 1)}s` });
+                list.appendChild(el('div', { className: 'clip-item' }, [
+                    el('div', {}, [badge, title, meta]),
+                ]));
+            }
+
+            for (const p of pendingItems) {
+                const badge = el('span', { className: 'pill-tag pill-wait', textContent: `Aguardando +${fmtNum(p.remaining_s || 0, 0)}s` });
+                const title = el('strong', { textContent: `${p.titulo || 'Marcação'} (${fmtClock(p.inicio_s)} → ${fmtClock(p.fim_s)})` });
+                const btnCancel = el('button', { type: 'button', className: 'btn-danger-sm', textContent: 'Cancelar' });
+                btnCancel.addEventListener('click', async () => {
+                    try {
+                        await api(`/api/v1/studio/live/pending/${encodeURIComponent(p.candidate_id)}/cancel`, { method: 'POST' });
+                        setStatus('Marcação pendente cancelada.', 'idle');
+                        pollLiveStatus();
+                    } catch (err) {
+                        setStatus(`Erro ao cancelar marcação: ${err.message}`, 'err');
+                    }
+                });
+                list.appendChild(el('div', { className: 'clip-item' }, [
+                    el('div', {}, [badge, title]),
+                    el('div', { className: 'clip-item-actions' }, [btnCancel]),
+                ]));
+            }
+
+            for (const s of [...suggestedCuts].reverse()) {
+                const badge = el('span', { className: 'pill-tag pill-wait', textContent: 'Sugestão Auto' });
+                const title = el('strong', { textContent: `${s.titulo} (${fmtClock(s.inicio_s)} → ${fmtClock(s.fim_s)})` });
+                const childrenInfo = [el('div', {}, [badge, title])];
+                if (s.transcript_snippet) {
+                    childrenInfo.push(el('div', { className: 'suggestion-meta', textContent: `"${s.transcript_snippet}"` }));
+                }
+
+                const btnApprove = el('button', { type: 'button', className: 'clip-btn-play', textContent: 'Aprovar' });
+                btnApprove.addEventListener('click', async () => {
+                    try {
+                        await api(`/api/v1/studio/live/suggestions/${encodeURIComponent(s.suggestion_id)}/approve`, {
+                            method: 'POST',
+                            body: JSON.stringify(currentLiveRenderOpts()),
+                        });
+                        setStatus('Sugestão aprovada! Renderizando clipe...', 'busy');
+                        pollLiveStatus();
+                    } catch (err) {
+                        setStatus(`Erro ao aprovar sugestão: ${err.message}`, 'err');
+                    }
+                });
+
+                const btnRefine = el('button', { type: 'button', className: 'chip', textContent: 'Ajustar (I/O)' });
+                btnRefine.addEventListener('click', () => pullLiveBufferToPlayer(Math.max(0, s.inicio_s - 6), s.fim_s + 6, s.inicio_s, s.fim_s));
+
+                const btnDismiss = el('button', { type: 'button', className: 'btn-danger-sm', textContent: 'Ignorar' });
+                btnDismiss.addEventListener('click', async () => {
+                    try {
+                        await api(`/api/v1/studio/live/suggestions/${encodeURIComponent(s.suggestion_id)}/dismiss`, { method: 'POST' });
+                        pollLiveStatus();
+                    } catch (err) {
+                        setStatus(`Erro ao ignorar sugestão: ${err.message}`, 'err');
+                    }
+                });
+
+                list.appendChild(el('div', { className: 'clip-item' }, [
+                    el('div', {}, childrenInfo),
+                    el('div', { className: 'clip-item-actions' }, [btnApprove, btnRefine, btnDismiss]),
+                ]));
+            }
+        }
+
+        function renderLiveClipsFeed(st) {
+            const wrap = document.getElementById('live-clips-feed-wrap');
+            const list = document.getElementById('live-clips-feed-list');
+            const countEl = document.getElementById('live-clips-feed-count');
+            if (!wrap || !list) return;
+
+            const clips = (st && st.recent_clips) || [];
+            list.textContent = '';
+            if (countEl) countEl.textContent = `${clips.length} clipe(s)`;
+            if (clips.length === 0) {
+                wrap.style.display = 'none';
+                return;
+            }
+            wrap.style.display = 'block';
+
+            for (const c of [...clips].reverse()) {
+                const badge = el('span', {
+                    className: c.approved ? 'pill-tag pill-saved' : 'pill-tag pill-new',
+                    textContent: c.approved ? 'Salvo ✓' : 'Novo',
+                });
+                const title = el('strong', {
+                    textContent: `${c.titulo || c.filename} (${fmtClock(c.inicio_s)} → ${fmtClock(c.fim_s)})`,
+                });
+                const subMeta = el('div', {
+                    className: 'suggestion-meta',
+                    textContent: c.transcript_text ? `${c.filename} · "${c.transcript_text.slice(0, 90)}"` : c.filename,
+                });
+
+                const btnPlay = el('button', { type: 'button', className: 'clip-btn-play', textContent: 'Assistir' });
+                btnPlay.addEventListener('click', () => playClipInMockup(c.download_url, c.filename));
+
+                const btnAdjust = el('button', { type: 'button', className: 'chip', textContent: 'Ajustar' });
+                btnAdjust.title = 'Puxa esse trecho bruto do buffer da live para ajustar início/fim no player principal';
+                btnAdjust.addEventListener('click', () => {
+                    const padStart = Math.max(0, (c.inicio_s || 0) - 8);
+                    const padEnd = (c.fim_s || 30) + 8;
+                    pullLiveBufferToPlayer(padStart, padEnd, c.inicio_s || 0, c.fim_s || 30);
+                });
+
+                const actions = [btnPlay, btnAdjust];
+                if (!c.approved) {
+                    const btnKeep = el('button', { type: 'button', className: 'chip', textContent: 'Manter ✓' });
+                    btnKeep.addEventListener('click', async () => {
+                        try {
+                            await api(`/api/v1/studio/live/clips/${encodeURIComponent(c.filename)}/approve`, { method: 'POST' });
+                            setStatus(`Clipe marcado como mantido: ${c.filename}`, 'idle');
+                            pollLiveStatus();
+                        } catch (err) {
+                            setStatus(`Erro ao aprovar clipe: ${err.message}`, 'err');
+                        }
+                    });
+                    actions.push(btnKeep);
+                }
+
+                const btnDiscard = el('button', { type: 'button', className: 'btn-danger-sm', textContent: 'Descartar' });
+                btnDiscard.addEventListener('click', async () => {
+                    try {
+                        await api(`/api/v1/studio/clips/${encodeURIComponent(c.filename)}`, { method: 'DELETE' });
+                        setStatus(`Clipe descartado do disco: ${c.filename}`, 'idle');
+                        pollLiveStatus();
+                        loadClipsList();
+                    } catch (err) {
+                        setStatus(`Erro ao descartar: ${err.message}`, 'err');
+                    }
+                });
+                actions.push(btnDiscard);
+
+                list.appendChild(el('div', { className: 'clip-item' }, [
+                    el('div', {}, [el('div', {}, [badge, title]), subMeta]),
+                    el('div', { className: 'clip-item-actions' }, actions),
+                ]));
+            }
+        }
+
         function updateLiveUI(st) {
             const running = Boolean(st && st.running);
+            liveRunningState = running;
+            const hasSegments = Boolean(st && (st.segments_count || 0) > 0);
             document.getElementById('btn-live-start').disabled = running;
             document.getElementById('btn-live-stop').disabled = !running;
-            document.getElementById('btn-live-clip-now').disabled = !running || (st.segments_count || 0) === 0;
-            document.getElementById('btn-live-mark-post').disabled = !running || (st.segments_count || 0) === 0;
+            document.getElementById('btn-live-toggle-monitor').disabled = !running;
+            document.getElementById('btn-live-apply-settings').disabled = !running;
+            document.getElementById('btn-live-clip-now').disabled = !running || !hasSegments;
+            document.getElementById('btn-live-mark-post').disabled = !running || !hasSegments;
+            document.getElementById('btn-live-replay-buffer').disabled = !hasSegments;
 
             const statusEl = document.getElementById('live-status-text');
+            const metaEl = document.getElementById('live-monitor-meta');
+            const tickerEl = document.getElementById('live-transcript-ticker');
+
             if (running) {
                 const platMap = { x: 'X', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' };
                 const plat = platMap[st.platform] || 'YouTube';
-                const snip = st.last_transcript_snippet ? ` · "${st.last_transcript_snippet}"` : '';
-                statusEl.textContent = `Ao vivo (${plat}) · ${fmtNum(st.buffer_duration_s || 0, 0)}s em buffer · ${st.clips_generated || 0} clipe(s)${snip}`;
-            } else if (st && st.last_error) {
-                statusEl.textContent = `Erro na live: ${st.last_error}`;
-            } else if (st && st.segments_count > 0) {
-                statusEl.textContent = `Live encerrada · ${st.clips_generated || 0} clipe(s) gerados.`;
+                const activeLen = (st.active_cuts && st.active_cuts.length) || 0;
+                const activeTxt = activeLen > 0 ? ` · ${activeLen} cortando agora` : '';
+                statusEl.textContent = `Ao vivo (${plat}) · ${fmtClock(st.buffer_duration_s || 0)} em buffer · ${st.clips_generated || 0} salvo(s)${activeTxt}`;
+                if (metaEl) {
+                    metaEl.textContent = `${plat} · Buffer gravado: ${fmtClock(st.buffer_duration_s || 0)} (${st.segments_count || 0} segs)`;
+                }
+                if (tickerEl) {
+                    tickerEl.textContent = st.last_transcript_snippet ? `Última fala: "${st.last_transcript_snippet}"` : '';
+                }
+                connectLiveMonitor(st.session_id || 'live', false);
+                if (!livePollTimer) {
+                    livePollTimer = setInterval(pollLiveStatus, 2000);
+                }
             } else {
-                statusEl.textContent = 'Nenhuma live ativa.';
+                stopLiveMonitor();
+                if (st && st.last_error) {
+                    statusEl.textContent = `Erro na live: ${st.last_error}`;
+                } else if (hasSegments) {
+                    statusEl.textContent = `Live encerrada · ${st.clips_generated || 0} clipe(s) · Buffer ainda disponível para corte fino.`;
+                } else {
+                    statusEl.textContent = 'Nenhuma live ativa.';
+                }
             }
 
-            if (st && (st.clips_generated || 0) > lastLiveClipsCount) {
-                lastLiveClipsCount = st.clips_generated;
+            renderLiveQueueSection(st);
+            renderLiveClipsFeed(st);
+
+            if (st && (st.clips_generated || 0) !== lastLiveClipsCount) {
+                lastLiveClipsCount = st.clips_generated || 0;
                 loadClipsList();
+            }
+        }
+
+        async function applyLiveSettings() {
+            if (!liveRunningState) return;
+            try {
+                const kwRaw = (document.getElementById('live_keywords').value || '').trim();
+                const keywords = kwRaw ? kwRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+                const st = await api('/api/v1/studio/live/settings', {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        auto_clip: document.getElementById('live_autoclip').checked,
+                        auto_clip_mode: document.getElementById('live_autoclip_mode').value,
+                        auto_clip_threshold_db: parseFloat(document.getElementById('live_threshold_db').value) || -12.0,
+                        auto_clip_keywords: keywords,
+                        ...currentLiveRenderOpts(),
+                    }),
+                });
+                updateLiveUI(st);
+                setStatus('Regras da live atualizadas em tempo real.', 'idle');
+            } catch (err) {
+                setStatus(`Erro ao atualizar regras da live: ${err.message}`, 'err');
+            }
+        }
+
+        async function pullLiveBufferToPlayer(inicioS = null, fimS = null, markInAbs = null, markOutAbs = null) {
+            setStatus('Extraindo trecho bruto do buffer da live para o player principal...', 'busy', 40);
+            try {
+                const payload = (inicioS !== null && fimS !== null)
+                    ? { inicio_s: inicioS, fim_s: fimS }
+                    : { duration_s: 45.0 };
+                const info = await api('/api/v1/studio/live/replay', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+                document.getElementById('video_path').value = info.file_path;
+                transcribedWords = null;
+                await loadSourcesList();
+                await loadSourceVideo();
+                if (markInAbs !== null && markOutAbs !== null) {
+                    const relIn = Math.max(0, markInAbs - info.inicio_s);
+                    const relOut = Math.min(info.duration_s, markOutAbs - info.inicio_s);
+                    document.getElementById('inicio_s').value = relIn.toFixed(1);
+                    document.getElementById('fim_s').value = Math.max(relIn + 1.0, relOut).toFixed(1);
+                } else {
+                    document.getElementById('inicio_s').value = '0.0';
+                    document.getElementById('fim_s').value = Number(info.duration_s || 30).toFixed(1);
+                }
+                validateCutBounds();
+                const sp = document.getElementById('source-player');
+                if (sp && sp.scrollIntoView) sp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setStatus(`Trecho da live (${fmtClock(info.inicio_s)} → ${fmtClock(info.fim_s)}) carregado no player principal! Ajuste [I] / [O] e renderize.`, 'idle');
+            } catch (err) {
+                setStatus(`Erro ao puxar replay do buffer: ${err.message}`, 'err');
             }
         }
 
@@ -1086,7 +1477,8 @@ http://127.0.0.1:8000/docs</div>
             try {
                 const st = await api('/api/v1/studio/live/status');
                 updateLiveUI(st);
-                if (!st.running && livePollTimer) {
+                const hasActiveWork = Boolean(st && ((st.active_cuts && st.active_cuts.length > 0) || (st.pending_marks || 0) > 0));
+                if (!st.running && !hasActiveWork && livePollTimer) {
                     clearInterval(livePollTimer);
                     livePollTimer = null;
                 }
@@ -1144,7 +1536,7 @@ http://127.0.0.1:8000/docs</div>
         async function startLiveCapture() {
             const url = document.getElementById('live_url').value.trim();
             if (!url) {
-                setStatus('Informe a URL da live no YouTube ou X.', 'err');
+                setStatus('Informe a URL da live no YouTube, X, Twitch ou Kick.', 'err');
                 return;
             }
             setStatus('Conectando à transmissão ao vivo...', 'busy');
@@ -1156,17 +1548,20 @@ http://127.0.0.1:8000/docs</div>
                     method: 'POST',
                     body: JSON.stringify({
                         url,
+                        segment_duration_s: 6.0,
                         auto_clip: document.getElementById('live_autoclip').checked,
+                        auto_clip_mode: document.getElementById('live_autoclip_mode').value,
                         auto_clip_threshold_db: parseFloat(document.getElementById('live_threshold_db').value) || -12.0,
                         auto_clip_keywords: keywords,
                         ...opts,
                     }),
                 });
                 lastLiveClipsCount = st.clips_generated || 0;
+                liveMonitorSessionId = null;
                 updateLiveUI(st);
                 if (livePollTimer) clearInterval(livePollTimer);
-                livePollTimer = setInterval(pollLiveStatus, 2500);
-                setStatus('Captura ao vivo iniciada. Aguarde o primeiro segmento (10s) para clipar.', 'idle');
+                livePollTimer = setInterval(pollLiveStatus, 2000);
+                setStatus('Live conectada! Assistindo no monitor acima — aperte M para clipar a qualquer instante.', 'idle');
             } catch (err) {
                 setStatus(`Falha ao iniciar live: ${err.message}`, 'err');
             }
@@ -1174,6 +1569,7 @@ http://127.0.0.1:8000/docs</div>
 
         async function stopLiveCapture() {
             try {
+                stopLiveMonitor();
                 const st = await api('/api/v1/studio/live/stop', { method: 'POST' });
                 updateLiveUI(st);
                 if (livePollTimer) {
@@ -1788,6 +2184,14 @@ http://127.0.0.1:8000/docs</div>
 
             document.getElementById('btn-live-start').addEventListener('click', startLiveCapture);
             document.getElementById('btn-live-stop').addEventListener('click', stopLiveCapture);
+            document.getElementById('btn-live-toggle-monitor').addEventListener('click', () => {
+                connectLiveMonitor(liveMonitorSessionId || 'active', true);
+                setStatus('Monitor ao vivo reconectado.', 'idle');
+            });
+            document.getElementById('btn-live-apply-settings').addEventListener('click', applyLiveSettings);
+            document.getElementById('live_autoclip').addEventListener('change', applyLiveSettings);
+            document.getElementById('live_autoclip_mode').addEventListener('change', applyLiveSettings);
+            document.getElementById('live_threshold_db').addEventListener('change', applyLiveSettings);
             document.getElementById('live_clip_duration').addEventListener('change', (e) => {
                 document.getElementById('btn-live-clip-now').textContent = `Clipar Últimos ${e.target.value}s (M)`;
             });
@@ -1796,6 +2200,7 @@ http://127.0.0.1:8000/docs</div>
                 markLiveClip(dur, 0);
             });
             document.getElementById('btn-live-mark-post').addEventListener('click', () => markLiveClip(15, 15));
+            document.getElementById('btn-live-replay-buffer').addEventListener('click', () => pullLiveBufferToPlayer());
             document.getElementById('btn-cleanup-live').addEventListener('click', cleanupLiveBuffers);
             const resSelEl = document.getElementById('res_clip_select');
             if (resSelEl) {
@@ -1923,6 +2328,7 @@ http://127.0.0.1:8000/docs</div>
             loadClipsList();
             loadPresetsList();
             loadSourceVideo();
+            pollLiveStatus();
         });
     </script>
 </body>

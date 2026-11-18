@@ -51,7 +51,7 @@ def resolve_live_stream_url(page_url: str) -> str:
         import yt_dlp  # type: ignore
 
         ydl_opts = {
-            "format": "best[ext=mp4]/best",
+            "format": "best[vcodec^=avc1][ext=mp4]/best[ext=mp4]/best",
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
@@ -124,6 +124,7 @@ class LiveClipSession:
         segment_duration_s: float = 10.0,
         retention_seconds: float = 1800.0,
         auto_clip: bool = False,
+        auto_clip_mode: str = "auto_render",
         auto_clip_duration_s: float = 25.0,
         auto_clip_threshold_db: float = -12.0,
         auto_clip_keywords: Optional[List[str]] = None,
@@ -147,6 +148,7 @@ class LiveClipSession:
         self.segment_duration_s = max(2.0, float(segment_duration_s))
         self.retention_seconds = max(60.0, float(retention_seconds))
         self.auto_clip = bool(auto_clip)
+        self.auto_clip_mode = "suggest_only" if auto_clip_mode == "suggest_only" else "auto_render"
         self.auto_clip_duration_s = max(5.0, float(auto_clip_duration_s))
         self.auto_clip_threshold_db = float(auto_clip_threshold_db)
         self.auto_clip_keywords = [k.strip().lower() for k in (auto_clip_keywords or []) if k and k.strip()]
@@ -155,6 +157,7 @@ class LiveClipSession:
         self.stream_resolver = stream_resolver or resolve_live_stream_url
         self.transcribe_fn = transcribe_fn
         self.last_transcript_snippet: str = ""
+        self.resolved_url: Optional[str] = None
 
         self.buffer = SegmentedBuffer(
             buffer_dir=self.segments_dir,
@@ -172,6 +175,7 @@ class LiveClipSession:
         self.ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         self.ffprobe_bin = shutil.which("ffprobe") or "ffprobe"
         self._proc: Optional[subprocess.Popen] = None
+        self._preview_proc: Optional[subprocess.Popen] = None
         self._ffmpeg_log_file = None
         self._ffmpeg_log_path = self.session_dir / "ffmpeg_live.log"
         self._monitor_thread: Optional[threading.Thread] = None
@@ -179,6 +183,7 @@ class LiveClipSession:
         self._lock = threading.Lock()
         self._render_semaphore = threading.Semaphore(2)
         self._active_renders = 0
+        self._active_cuts: Dict[str, Dict[str, Any]] = {}
         self._kw_busy = False
         self._recent_db_history: deque[float] = deque(maxlen=18)
 
@@ -189,11 +194,27 @@ class LiveClipSession:
         self._next_t_start: float = 0.0
         self._candidate_render_opts: Dict[str, Dict[str, Any]] = {}
         self.clips_generated: List[Dict[str, Any]] = []
+        self.suggested_cuts: List[Dict[str, Any]] = []
         self._last_auto_clip_s: float = -999.0
+
+    def _terminate_preview_proc(self) -> None:
+        with self._lock:
+            p = self._preview_proc
+            self._preview_proc = None
+        if p and p.poll() is None:
+            try:
+                p.terminate()
+                p.wait(timeout=2)
+            except Exception:
+                try:
+                    p.kill()
+                except Exception:
+                    pass
 
     def start(self) -> None:
         """Resolve o stream e inicia captura contínua em segmentos via FFmpeg."""
         resolved_url = self.stream_resolver(self.url)
+        self.resolved_url = resolved_url
         cmd = [
             self.ffmpeg_bin,
             "-hide_banner",
@@ -235,9 +256,84 @@ class LiveClipSession:
         )
         self._monitor_thread.start()
 
+    def iter_preview_fmp4(self, chunk_size: int = 16384):
+        """Gera fluxo MP4 fragmentado (fMP4) ao vivo para o monitor <video> no navegador."""
+        target_url = self.resolved_url or self.stream_resolver(self.url)
+        self._terminate_preview_proc()
+
+        cmd = [
+            self.ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+        ]
+        if target_url.startswith(("http://", "https://")):
+            cmd.extend(["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5"])
+        else:
+            cmd.append("-re")
+
+        cmd.extend([
+            "-i",
+            target_url,
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-tune",
+            "zerolatency",
+            "-g",
+            "30",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-f",
+            "mp4",
+            "-movflags",
+            "frag_keyframe+empty_moov+default_base_moof",
+            "pipe:1",
+        ])
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        with self._lock:
+            self._preview_proc = proc
+        try:
+            while not self._stop_event.is_set() and proc.stdout is not None:
+                data = proc.stdout.read(chunk_size)
+                if not data:
+                    break
+                yield data
+        finally:
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+            if proc.stdout is not None:
+                try:
+                    proc.stdout.close()
+                except Exception:
+                    pass
+            with self._lock:
+                if self._preview_proc is proc:
+                    self._preview_proc = None
+
     def stop(self) -> None:
         """Encerra captura ao vivo de forma limpa e processa o último segmento gravado."""
         self._stop_event.set()
+        self._terminate_preview_proc()
         proc = self._proc
         if proc and proc.poll() is None:
             try:
@@ -347,11 +443,23 @@ class LiveClipSession:
             if triggered_title and (now_t - self._last_auto_clip_s >= self.auto_clip_cooldown_s):
                 self._last_auto_clip_s = now_t
                 ini = max(0.0, now_t - self.auto_clip_duration_s)
-                threading.Thread(
-                    target=self._render_window_worker,
-                    args=(ini, now_t, triggered_title, self.default_render_opts, None),
-                    daemon=True,
-                ).start()
+                if self.auto_clip_mode == "suggest_only":
+                    sug_entry = {
+                        "suggestion_id": f"sug_{uuid.uuid4().hex[:8]}",
+                        "titulo": triggered_title,
+                        "inicio_s": round(ini, 2),
+                        "fim_s": round(now_t, 2),
+                        "transcript_snippet": self.last_transcript_snippet,
+                        "created_at": time.time(),
+                    }
+                    with self._lock:
+                        self.suggested_cuts.append(sug_entry)
+                else:
+                    threading.Thread(
+                        target=self._render_window_worker,
+                        args=(ini, now_t, triggered_title, self.default_render_opts, None),
+                        daemon=True,
+                    ).start()
         finally:
             self._kw_busy = False
 
@@ -466,6 +574,11 @@ class LiveClipSession:
             except Exception:
                 pass
 
+    def _set_cut_stage(self, cut_id: str, stage: str) -> None:
+        with self._lock:
+            if cut_id in self._active_cuts:
+                self._active_cuts[cut_id]["stage"] = stage
+
     def _render_window_worker(
         self,
         inicio_s: float,
@@ -474,11 +587,21 @@ class LiveClipSession:
         render_opts: Dict[str, Any],
         candidate_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        cut_id = f"cut_{uuid.uuid4().hex[:8]}"
         window_mp4 = self.windows_dir / f"win_{uuid.uuid4().hex[:8]}.mp4"
         with self._lock:
             self._active_renders += 1
+            self._active_cuts[cut_id] = {
+                "cut_id": cut_id,
+                "titulo": titulo,
+                "inicio_s": round(inicio_s, 2),
+                "fim_s": round(fim_s, 2),
+                "stage": "aguardando_fila",
+                "started_at": time.time(),
+            }
         self._render_semaphore.acquire()
         try:
+            self._set_cut_stage(cut_id, "extraindo_buffer")
             self.extract_window(inicio_s, fim_s, window_mp4)
             dur = max(1.0, fim_s - inicio_s)
             opts = {**self.default_render_opts, **(render_opts or {})}
@@ -487,6 +610,7 @@ class LiveClipSession:
             transcript_text = ""
 
             if burn_subs and not subtitles_words and self.transcribe_fn is not None:
+                self._set_cut_stage(cut_id, "transcrevendo")
                 try:
                     lang = str(opts.get("language", "pt") or "pt")
                     tr = self.transcribe_fn(window_mp4, lang) or {}
@@ -495,6 +619,7 @@ class LiveClipSession:
                 except Exception as exc:
                     logger.warning("Falha na transcrição automática do clipe ao vivo: %s", exc)
 
+            self._set_cut_stage(cut_id, "renderizando")
             params = {
                 "video_path": str(window_mp4),
                 "inicio_s": 0.0,
@@ -504,6 +629,7 @@ class LiveClipSession:
                 "gameplay_rect": opts.get("gameplay_rect"),
                 "stacked_facecam_height": int(opts.get("stacked_facecam_height", 720)),
                 "aspect_ratio": opts.get("aspect_ratio", "9:16"),
+                "solo_align": opts.get("solo_align", "center"),
                 "subtitles": subtitles_words,
                 "subtitles_are_absolute": False,
                 "subtitle_preset": opts.get("subtitle_preset", "minimal_clean"),
@@ -521,6 +647,7 @@ class LiveClipSession:
                     "fim_s": round(fim_s, 2),
                     "download_url": f"/api/v1/studio/video/{fname}",
                     "transcript_text": transcript_text,
+                    "approved": False,
                     "created_at": time.time(),
                 }
                 extra_entries = []
@@ -533,6 +660,8 @@ class LiveClipSession:
                             "inicio_s": round(inicio_s, 2),
                             "fim_s": round(fim_s, 2),
                             "download_url": f"/api/v1/studio/video/{ex_name}",
+                            "transcript_text": transcript_text,
+                            "approved": False,
                             "created_at": time.time(),
                         })
                 with self._lock:
@@ -541,6 +670,7 @@ class LiveClipSession:
                     self.last_error = None
                 if candidate_id and candidate_id in self.marker._candidates:
                     self.marker._candidates[candidate_id].status = CandidateStatus.CONCLUIDO
+                    self.buffer.unlock_range(lock_id=candidate_id)
                 return entry
             else:
                 self.last_error = result.error or "Falha ao renderizar clipe ao vivo."
@@ -549,9 +679,15 @@ class LiveClipSession:
             self.last_error = str(exc)
             return {"error": self.last_error}
         finally:
+            if candidate_id:
+                try:
+                    self.buffer.unlock_range(lock_id=candidate_id)
+                except Exception:
+                    pass
             self._render_semaphore.release()
             with self._lock:
                 self._active_renders = max(0, self._active_renders - 1)
+                self._active_cuts.pop(cut_id, None)
             try:
                 window_mp4.unlink(missing_ok=True)
             except Exception:
@@ -566,7 +702,7 @@ class LiveClipSession:
         background: bool = True,
     ) -> Dict[str, Any]:
         """Cria um corte instantâneo do buffer ou agenda marcação aguardando post_s."""
-        self._scan_new_segments(include_last=False)
+        self._scan_new_segments(include_last=not self.running)
         now_t = self.clock.current_time()
         if len(self.buffer) == 0 or now_t <= 0.5:
             raise RuntimeError("Buffer ao vivo ainda não possui segmentos suficientes. Aguarde alguns segundos.")
@@ -604,29 +740,171 @@ class LiveClipSession:
             "fim_s": cand.fim_s,
         }
 
+    def update_settings(
+        self,
+        auto_clip: Optional[bool] = None,
+        auto_clip_mode: Optional[str] = None,
+        auto_clip_threshold_db: Optional[float] = None,
+        auto_clip_keywords: Optional[List[str]] = None,
+        default_render_opts: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Atualiza controles de auto-clipping e formato em tempo real sem parar a captura."""
+        with self._lock:
+            if auto_clip is not None:
+                self.auto_clip = bool(auto_clip)
+            if auto_clip_mode in ("auto_render", "suggest_only"):
+                self.auto_clip_mode = auto_clip_mode
+            if auto_clip_threshold_db is not None:
+                self.auto_clip_threshold_db = float(auto_clip_threshold_db)
+            if auto_clip_keywords is not None:
+                self.auto_clip_keywords = [k.strip().lower() for k in auto_clip_keywords if k and k.strip()]
+            if default_render_opts:
+                self.default_render_opts.update(default_render_opts)
+        return self.get_status()
+
+    def cancel_pending_mark(self, candidate_id: str) -> bool:
+        """Cancela uma marcação que estava aguardando janela posterior (+15s)."""
+        cand = self.marker.get_candidate(candidate_id)
+        if not cand or cand.status != CandidateStatus.AGUARDANDO_POST_WINDOW:
+            return False
+        self.marker.reject(candidate_id)
+        with self._lock:
+            self._candidate_render_opts.pop(candidate_id, None)
+        return True
+
+    def approve_suggestion(
+        self,
+        suggestion_id: str,
+        render_opts: Optional[Dict[str, Any]] = None,
+        background: bool = True,
+    ) -> Dict[str, Any]:
+        """Aprova uma sugestão de corte automático e inicia a renderização."""
+        target = None
+        with self._lock:
+            for idx, item in enumerate(self.suggested_cuts):
+                if item.get("suggestion_id") == suggestion_id:
+                    target = self.suggested_cuts.pop(idx)
+                    break
+        if not target:
+            raise KeyError(f"Sugestão não encontrada: {suggestion_id}")
+
+        ini = float(target["inicio_s"])
+        fim = float(target["fim_s"])
+        titulo = str(target.get("titulo") or "Corte Aprovado")
+        if background:
+            threading.Thread(
+                target=self._render_window_worker,
+                args=(ini, fim, titulo, render_opts or {}, None),
+                daemon=True,
+            ).start()
+            return {"status": "rendering", "suggestion_id": suggestion_id, "inicio_s": ini, "fim_s": fim}
+        res = self._render_window_worker(ini, fim, titulo, render_opts or {}, None)
+        return {"status": "done" if "filename" in res else "error", **res}
+
+    def dismiss_suggestion(self, suggestion_id: str) -> bool:
+        """Descarta uma sugestão automática sem renderizar."""
+        with self._lock:
+            before = len(self.suggested_cuts)
+            self.suggested_cuts = [s for s in self.suggested_cuts if s.get("suggestion_id") != suggestion_id]
+            return len(self.suggested_cuts) < before
+
+    def approve_clip(self, filename: str) -> bool:
+        """Marca um clipe gerado na live como aprovado/mantido."""
+        found = False
+        with self._lock:
+            for c in self.clips_generated:
+                if c.get("filename") == filename:
+                    c["approved"] = True
+                    found = True
+        return found
+
+    def remove_clip_entry(self, filename: str) -> bool:
+        """Remove o registro de um clipe descartado da lista da sessão ao vivo."""
+        with self._lock:
+            before = len(self.clips_generated)
+            self.clips_generated = [c for c in self.clips_generated if c.get("filename") != filename]
+            return len(self.clips_generated) < before
+
+    def export_buffer_replay(
+        self,
+        dest_dir: Path,
+        inicio_s: Optional[float] = None,
+        fim_s: Optional[float] = None,
+        duration_s: float = 45.0,
+    ) -> Dict[str, Any]:
+        """Extrai um trecho bruto do buffer da live para ajuste fino (I/O) no player principal do Studio."""
+        self._scan_new_segments(include_last=not self.running)
+        now_t = self.clock.current_time()
+        if len(self.buffer) == 0 or now_t <= 0.5:
+            raise RuntimeError("Buffer ao vivo ainda não possui vídeo suficiente para replay.")
+
+        if inicio_s is not None and fim_s is not None:
+            ini = max(0.0, float(inicio_s))
+            fim = min(now_t, float(fim_s))
+        else:
+            fim = now_t
+            ini = max(0.0, fim - max(3.0, float(duration_s)))
+
+        if fim - ini < 1.0:
+            ini = max(0.0, fim - 5.0)
+        if fim <= ini:
+            raise RuntimeError("Intervalo de replay inválido para o buffer atual.")
+
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out_name = f"live_replay_{self.session_id}_{int(ini)}s_{int(fim)}s.mp4"
+        out_path = (dest_dir / out_name).resolve()
+        self.extract_window(ini, fim, out_path)
+        return {
+            "file_path": str(out_path),
+            "filename": out_name,
+            "inicio_s": round(ini, 2),
+            "fim_s": round(fim, 2),
+            "duration_s": round(fim - ini, 2),
+        }
+
     def get_status(self) -> Dict[str, Any]:
-        pending = [
-            c.to_dict()
-            for c in self.marker._candidates.values()
-            if c.status == CandidateStatus.AGUARDANDO_POST_WINDOW
-        ]
+        now_t = self.clock.current_time()
+        now_wall = time.time()
+        pending_items = []
+        for c in self.marker.list_candidates(status=CandidateStatus.AGUARDANDO_POST_WINDOW):
+            pending_items.append({
+                "candidate_id": c.id,
+                "titulo": c.titulo,
+                "inicio_s": c.inicio_s,
+                "fim_s": c.fim_s,
+                "remaining_s": round(max(0.0, c.fim_s - now_t), 1),
+            })
         with self._lock:
             clips = list(self.clips_generated)
+            suggestions = list(self.suggested_cuts)
+            active_cuts = [
+                {
+                    **item,
+                    "elapsed_s": round(max(0.0, now_wall - float(item.get("started_at", now_wall))), 1),
+                }
+                for item in sorted(self._active_cuts.values(), key=lambda x: x.get("started_at", 0.0))
+            ]
         return {
             "active": self.running,
             "session_id": self.session_id,
             "url": self.url,
             "platform": self.platform,
             "running": self.running,
-            "elapsed_s": round(time.time() - self.started_at, 1) if self.started_at else 0.0,
+            "elapsed_s": round(now_wall - self.started_at, 1) if self.started_at else 0.0,
             "segments_count": len(self.buffer),
-            "buffer_duration_s": round(self.clock.current_time(), 1),
+            "buffer_duration_s": round(now_t, 1),
             "auto_clip": self.auto_clip,
+            "auto_clip_mode": self.auto_clip_mode,
+            "auto_clip_threshold_db": self.auto_clip_threshold_db,
             "auto_clip_keywords": list(self.auto_clip_keywords),
             "last_transcript_snippet": self.last_transcript_snippet,
+            "active_cuts": active_cuts,
+            "pending_marks": len(pending_items),
+            "pending_items": pending_items,
+            "suggested_cuts": suggestions[-15:],
             "clips_generated": len(clips),
-            "recent_clips": clips[-10:],
-            "pending_marks": len(pending),
+            "recent_clips": clips[-15:],
             "last_error": self.last_error,
         }
 
@@ -652,6 +930,7 @@ class LiveManager:
         segment_duration_s: float = 10.0,
         retention_seconds: float = 1800.0,
         auto_clip: bool = False,
+        auto_clip_mode: str = "auto_render",
         auto_clip_duration_s: float = 25.0,
         auto_clip_threshold_db: float = -12.0,
         auto_clip_keywords: Optional[List[str]] = None,
@@ -672,6 +951,7 @@ class LiveManager:
                 segment_duration_s=segment_duration_s,
                 retention_seconds=retention_seconds,
                 auto_clip=auto_clip,
+                auto_clip_mode=auto_clip_mode,
                 auto_clip_duration_s=auto_clip_duration_s,
                 auto_clip_threshold_db=auto_clip_threshold_db,
                 auto_clip_keywords=auto_clip_keywords,
@@ -702,6 +982,18 @@ class LiveManager:
             raise RuntimeError("Nenhuma transmissão ao vivo iniciada no momento.")
         return session.mark_and_clip(pre_s=pre_s, post_s=post_s, titulo=titulo, render_opts=render_opts)
 
+    def update_settings(self, **kwargs: Any) -> Dict[str, Any]:
+        session = self.current_session
+        if not session:
+            raise RuntimeError("Nenhuma transmissão ao vivo ativa.")
+        return session.update_settings(**kwargs)
+
+    def remove_clip_entry(self, filename: str) -> bool:
+        session = self.current_session
+        if not session:
+            return False
+        return session.remove_clip_entry(filename)
+
     def get_status(self) -> Dict[str, Any]:
         session = self.current_session
         if not session:
@@ -710,9 +1002,14 @@ class LiveManager:
                 "running": False,
                 "segments_count": 0,
                 "buffer_duration_s": 0.0,
+                "auto_clip": False,
+                "auto_clip_mode": "auto_render",
+                "active_cuts": [],
+                "pending_marks": 0,
+                "pending_items": [],
+                "suggested_cuts": [],
                 "clips_generated": 0,
                 "recent_clips": [],
-                "pending_marks": 0,
                 "last_error": None,
             }
         return session.get_status()
