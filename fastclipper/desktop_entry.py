@@ -38,6 +38,22 @@ def _configure_frozen_environment() -> None:
             data_dir.mkdir(parents=True, exist_ok=True)
             os.environ["FASTCLIPPER_DATA_DIR"] = str(data_dir)
 
+        # Garante que sys.stdout/sys.stderr sejam válidos mesmo se executado oculto/sem console
+        try:
+            if sys.stdout is None or not hasattr(sys.stdout, "write"):
+                log_file = (Path(os.environ["FASTCLIPPER_DATA_DIR"]) / "fastclipper.log").open("a", encoding="utf-8")
+                sys.stdout = log_file
+        except Exception:
+            try:
+                sys.stdout = open(os.devnull, "w", encoding="utf-8")
+            except Exception:
+                pass
+        try:
+            if sys.stderr is None or not hasattr(sys.stderr, "write"):
+                sys.stderr = sys.stdout or open(os.devnull, "w", encoding="utf-8")
+        except Exception:
+            pass
+
 
 def _is_server_running(port: int = 8000) -> bool:
     """Verifica se o Fast Clipper Studio já está rodando e respondendo na porta."""
