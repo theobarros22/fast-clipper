@@ -953,19 +953,27 @@ http://127.0.0.1:8000/docs</div>
         }
 
         async function api(url, options = {}) {
-            // fetch() com corpo string envia "text/plain" por padrao; o FastAPI so le JSON com o header correto (senao: 422).
-            const headers = { ...(options.headers || {}) };
-            const hasCT = Object.keys(headers).some((k) => k.toLowerCase() === 'content-type');
-            if (typeof options.body === 'string' && !hasCT) headers['Content-Type'] = 'application/json';
-            const res = await fetch(url, { ...options, headers });
+            const opts = { ...options };
+            if (typeof opts.body === 'string') {
+                opts.headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+            }
+            const res = await fetch(url, opts);
             let data = null;
             try { data = await res.json(); } catch (e) {}
             if (!res.ok) {
-                let detail = data && data.detail;
-                if (Array.isArray(detail)) {
-                    detail = detail.map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg}`).join(' | ');
+                const detail = data && data.detail;
+                let msg = `Erro HTTP ${res.status}`;
+                if (typeof detail === 'string') {
+                    msg = detail;
+                } else if (Array.isArray(detail)) {
+                    msg = detail.map(d => {
+                        const field = Array.isArray(d.loc) ? d.loc.slice(1).join('.') : '';
+                        return field ? `${field}: ${d.msg}` : (d.msg || JSON.stringify(d));
+                    }).join('; ');
+                } else if (detail && typeof detail === 'object') {
+                    msg = JSON.stringify(detail);
                 }
-                throw new Error(detail || `Erro HTTP ${res.status}`);
+                throw new Error(msg);
             }
             return data;
         }
@@ -1107,8 +1115,15 @@ http://127.0.0.1:8000/docs</div>
             const vpInput = document.getElementById('video_path');
             const videoPath = vpInput.value.trim();
             if (!videoPath) return;
-            if (/^https?:\/\//i.test(videoPath)) {
-                setStatus('Este campo aceita apenas arquivo local. Para live ou link, use o campo "URL da live" e clique em Iniciar Live.', 'err');
+            if (isRemoteWebUrl(videoPath)) {
+                const fullUrl = /^https?:\/\//i.test(videoPath) ? videoPath : `https://${videoPath}`;
+                const liveInput = document.getElementById('live_url');
+                if (liveInput) liveInput.value = fullUrl;
+                const liveBox = document.getElementById('live-clipper-box');
+                if (liveBox) liveBox.open = true;
+                vpInput.value = '';
+                saveFormState();
+                setStatus('Links http(s) não são arquivos locais: movemos o link para "URL da live" (clique em "Iniciar Live" ou use "Baixar vídeo autorizado").', 'warn');
                 return;
             }
             const player = document.getElementById('source-player');
