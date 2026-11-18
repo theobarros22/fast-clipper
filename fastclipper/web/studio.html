@@ -485,6 +485,11 @@
                     <button type="button" class="chip" data-dur="15">+15s</button>
                     <button type="button" class="chip" data-dur="30">+30s</button>
                     <button type="button" class="chip" data-dur="45">+45s</button>
+                    <button type="button" class="chip" data-dur="60">+1m</button>
+                    <button type="button" class="chip" data-dur="120">+2m</button>
+                    <button type="button" class="chip" data-dur="180">+3m</button>
+                    <button type="button" class="chip" data-dur="300">+5m</button>
+                    <button type="button" class="chip" data-dur="360">+6m</button>
                 </div>
 
                 <div class="row-2">
@@ -549,11 +554,16 @@
                                 <option value="15">15s</option>
                                 <option value="30" selected>30s</option>
                                 <option value="45">45s</option>
-                                <option value="60">60s</option>
+                                <option value="60">60s (1 min)</option>
+                                <option value="90">90s (1m30s)</option>
+                                <option value="120">2 minutos (120s)</option>
+                                <option value="180">3 minutos (180s)</option>
+                                <option value="300">5 minutos (300s)</option>
+                                <option value="360">6 minutos (360s)</option>
                             </select>
                             <button type="button" id="btn-live-clip-now" class="chip" disabled>Clipar Últimos 30s (M)</button>
                             <button type="button" id="btn-live-mark-post" class="chip" disabled>Marcar Agora (+15s)</button>
-                            <button type="button" id="btn-live-replay-buffer" class="chip" disabled title="Puxa os últimos 45s brutos para o player principal ajustar I/O com precisão">Puxar 45s p/ Corte Fino (I/O)</button>
+                            <button type="button" id="btn-live-replay-buffer" class="chip" disabled title="Puxa o trecho bruto do buffer para o player principal ajustar I/O com precisão">Puxar 45s p/ Corte Fino (I/O)</button>
                             <span id="live-status-text" aria-live="polite" style="font-size:12px; color:var(--sub);">Nenhuma live ativa.</span>
                         </div>
 
@@ -593,7 +603,7 @@
                 <div class="row-3">
                     <div>
                         <label class="label" for="sug-duration">Duração alvo (s)</label>
-                        <input type="number" id="sug-duration" class="input-text" value="25" min="5" max="90">
+                        <input type="number" id="sug-duration" class="input-text" value="25" min="5" max="360">
                     </div>
                     <div>
                         <label class="label" for="sug-topk">Quantidade</label>
@@ -1498,16 +1508,24 @@ http://127.0.0.1:8000/docs</div>
             }
         }
 
+        function fmtLiveDurLabel(sec) {
+            const s = parseInt(sec, 10) || 30;
+            if (s >= 60 && s % 60 === 0) return `${s / 60} min`;
+            return `${s}s`;
+        }
+
         async function applyLiveSettings() {
             if (!liveRunningState) return;
             try {
                 const kwRaw = (document.getElementById('live_keywords').value || '').trim();
                 const keywords = kwRaw ? kwRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+                const clipDur = parseFloat(document.getElementById('live_clip_duration').value) || 30.0;
                 const st = await api('/api/v1/studio/live/settings', {
                     method: 'PATCH',
                     body: JSON.stringify({
                         auto_clip: document.getElementById('live_autoclip').checked,
                         auto_clip_mode: document.getElementById('live_autoclip_mode').value,
+                        auto_clip_duration_s: clipDur,
                         auto_clip_threshold_db: parseFloat(document.getElementById('live_threshold_db').value) || -12.0,
                         auto_clip_keywords: keywords,
                         ...currentLiveRenderOpts(),
@@ -1523,9 +1541,10 @@ http://127.0.0.1:8000/docs</div>
         async function pullLiveBufferToPlayer(inicioS = null, fimS = null, markInAbs = null, markOutAbs = null) {
             setStatus('Extraindo trecho bruto do buffer da live para o player principal...', 'busy', 40);
             try {
+                const selectedDur = Math.max(45.0, parseFloat(document.getElementById('live_clip_duration').value) || 45.0);
                 const payload = (inicioS !== null && fimS !== null)
                     ? { inicio_s: inicioS, fim_s: fimS }
-                    : { duration_s: 45.0 };
+                    : { duration_s: selectedDur };
                 const info = await api('/api/v1/studio/live/replay', {
                     method: 'POST',
                     body: JSON.stringify(payload),
@@ -1623,6 +1642,7 @@ http://127.0.0.1:8000/docs</div>
                 const opts = currentLiveRenderOpts();
                 const kwRaw = (document.getElementById('live_keywords').value || '').trim();
                 const keywords = kwRaw ? kwRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+                const clipDur = parseFloat(document.getElementById('live_clip_duration').value) || 30.0;
                 const st = await api('/api/v1/studio/live/start', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -1630,6 +1650,7 @@ http://127.0.0.1:8000/docs</div>
                         segment_duration_s: 6.0,
                         auto_clip: document.getElementById('live_autoclip').checked,
                         auto_clip_mode: document.getElementById('live_autoclip_mode').value,
+                        auto_clip_duration_s: clipDur,
                         auto_clip_threshold_db: parseFloat(document.getElementById('live_threshold_db').value) || -12.0,
                         auto_clip_keywords: keywords,
                         ...opts,
@@ -2327,7 +2348,12 @@ http://127.0.0.1:8000/docs</div>
             document.getElementById('live_autoclip_mode').addEventListener('change', applyLiveSettings);
             document.getElementById('live_threshold_db').addEventListener('change', applyLiveSettings);
             document.getElementById('live_clip_duration').addEventListener('change', (e) => {
-                document.getElementById('btn-live-clip-now').textContent = `Clipar Últimos ${e.target.value}s (M)`;
+                const dur = parseInt(e.target.value, 10) || 30;
+                const lbl = fmtLiveDurLabel(dur);
+                document.getElementById('btn-live-clip-now').textContent = `Clipar Últimos ${lbl} (M)`;
+                const replayDurLbl = fmtLiveDurLabel(Math.max(45, dur));
+                document.getElementById('btn-live-replay-buffer').textContent = `Puxar ${replayDurLbl} p/ Corte Fino (I/O)`;
+                applyLiveSettings();
             });
             document.getElementById('btn-live-clip-now').addEventListener('click', () => {
                 const dur = parseInt(document.getElementById('live_clip_duration').value, 10) || 30;

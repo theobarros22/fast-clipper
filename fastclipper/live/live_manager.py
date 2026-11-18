@@ -774,6 +774,7 @@ class LiveClipSession:
         self,
         auto_clip: Optional[bool] = None,
         auto_clip_mode: Optional[str] = None,
+        auto_clip_duration_s: Optional[float] = None,
         auto_clip_threshold_db: Optional[float] = None,
         auto_clip_keywords: Optional[List[str]] = None,
         default_render_opts: Optional[Dict[str, Any]] = None,
@@ -784,6 +785,9 @@ class LiveClipSession:
                 self.auto_clip = bool(auto_clip)
             if auto_clip_mode in ("auto_render", "suggest_only"):
                 self.auto_clip_mode = auto_clip_mode
+            if auto_clip_duration_s is not None:
+                self.auto_clip_duration_s = max(5.0, float(auto_clip_duration_s))
+                self.marker.pre_window_s = self.auto_clip_duration_s
             if auto_clip_threshold_db is not None:
                 self.auto_clip_threshold_db = float(auto_clip_threshold_db)
             if auto_clip_keywords is not None:

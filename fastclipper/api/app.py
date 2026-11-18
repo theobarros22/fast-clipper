@@ -356,6 +356,7 @@ class LiveMarkRequest(BaseModel):
 class LiveSettingsRequest(BaseModel):
     auto_clip: Optional[bool] = None
     auto_clip_mode: Optional[Literal["auto_render", "suggest_only"]] = None
+    auto_clip_duration_s: Optional[float] = None
     auto_clip_threshold_db: Optional[float] = None
     auto_clip_keywords: Optional[List[str]] = None
     layout: Optional[str] = None
@@ -1190,6 +1191,7 @@ def studio_live_update_settings(req: LiveSettingsRequest):
         return live_manager.update_settings(
             auto_clip=req.auto_clip,
             auto_clip_mode=req.auto_clip_mode,
+            auto_clip_duration_s=req.auto_clip_duration_s,
             auto_clip_threshold_db=req.auto_clip_threshold_db,
             auto_clip_keywords=req.auto_clip_keywords,
             default_render_opts=render_opts or None,
