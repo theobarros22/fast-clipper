@@ -42,6 +42,7 @@ def render_vertical_ffmpeg(
     watermark_text: Optional[str] = None,
     error_out: Optional[List[str]] = None,
     solo_align: str = "center",
+    focus_center_x_ratio: Optional[float] = None,
 ) -> bool:
     """Executa um único passo FFmpeg para corte, layout 9:16 e queima opcional de legenda ASS."""
     if not source_path and not concat_file:
@@ -87,12 +88,16 @@ def render_vertical_ffmpeg(
             and layout_config.gameplay_rect is None
             and layout_config.target_height > layout_config.target_width
             and source_w > source_h
-            and solo_align in ("left", "right")
+            and (solo_align in ("left", "right") or focus_center_x_ratio is not None)
         ):
             crop_w = max(2, int(round(source_h * layout_config.target_width / layout_config.target_height)))
             crop_w = min(source_w, crop_w - (crop_w % 2))
             max_x = max(0, source_w - crop_w)
-            crop_x = int(round(max_x * (0.22 if solo_align == "left" else 0.78)))
+            if focus_center_x_ratio is not None:
+                center_px = source_w * max(0.0, min(1.0, float(focus_center_x_ratio)))
+                crop_x = int(round(max(0.0, min(float(max_x), center_px - crop_w / 2.0))))
+            else:
+                crop_x = int(round(max_x * (0.22 if solo_align == "left" else 0.78)))
             filtro_base = (
                 f"crop={crop_w}:{source_h}:{crop_x}:0,"
                 f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"

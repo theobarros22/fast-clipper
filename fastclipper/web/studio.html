@@ -656,13 +656,49 @@
                     </button>
                 </div>
 
-                <div id="solo-config" class="field" style="margin-top:10px; margin-bottom:0;">
-                    <label class="label" for="solo_align">Posição horizontal no Solo 9:16</label>
+                <div id="solo-config" class="field" style="margin-top:10px; margin-bottom:10px;">
+                    <label class="label" for="solo_align">Posição horizontal manual no Solo 9:16 (usada se o reconhecimento estiver desativado)</label>
                     <select id="solo_align" class="select-box">
                         <option value="center" selected>Centro (padrão)</option>
                         <option value="left">Esquerda (pessoa à esquerda)</option>
                         <option value="right">Direita (pessoa à direita)</option>
                     </select>
+                </div>
+
+                <div class="live-subpanel" style="margin-top:10px; margin-bottom:10px;">
+                    <div class="live-subpanel-title">
+                        <span>Reconhecimento Facial &amp; Prioridade de Destaque</span>
+                        <span id="face-priority-status-pill" class="pill-tag pill-saved">Falante Ativo</span>
+                    </div>
+                    <div class="row-2" style="margin-bottom:8px;">
+                        <div class="field" style="margin-bottom:0;">
+                            <label class="label" for="face_priority_mode">Quem terá prioridade no corte 9:16 e Auto-Clip</label>
+                            <select id="face_priority_mode" class="select-box">
+                                <option value="auto_speaker" selected>Automático: Quem está falando / maior destaque na cena</option>
+                                <option value="target_face">Reconhecimento Facial: Priorizar pessoa escolhida</option>
+                                <option value="largest_face">Maior rosto em close na tela</option>
+                                <option value="off">Desativado (usar apenas posição manual)</option>
+                            </select>
+                        </div>
+                        <div class="field" style="margin-bottom:0; display:flex; align-items:end; gap:8px; flex-wrap:wrap;">
+                            <button type="button" id="btn-detect-faces-scene" class="chip">Detectar Rostos na Cena / Live</button>
+                            <button type="button" id="btn-upload-face-ref" class="chip">Subir Foto de Referência</button>
+                            <input type="file" id="face-ref-upload" accept="image/*" style="display:none;">
+                        </div>
+                    </div>
+
+                    <div id="face-priority-active-badge" style="display:none; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; background:var(--surface); border:1px solid var(--accent); border-radius:8px; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <img id="face-priority-thumb" alt="Rosto prioritário" style="width:44px; height:44px; border-radius:50%; object-fit:cover; border:2px solid var(--accent);">
+                            <div>
+                                <strong id="face-priority-name" style="font-size:13px; display:block;">Destaque Principal</strong>
+                                <span style="font-size:11.5px; color:var(--sub);">Reconhecimento facial ativo — o corte 9:16 e a live priorizam esta pessoa</span>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-clear-face-priority" class="btn-danger-sm">Remover destaque</button>
+                    </div>
+
+                    <div id="detected-faces-gallery" style="display:none; gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
                 </div>
 
                 <div id="stacked-config" class="stacked-box">
@@ -1234,6 +1270,7 @@ http://127.0.0.1:8000/docs</div>
             const subPreset = document.getElementById('subtitle_preset');
             const ar = document.getElementById('aspect_ratio');
             const alignEl = document.getElementById('solo_align');
+            const fpEl = document.getElementById('face_priority_mode');
             const langEl = document.getElementById('transcribe-lang');
             const hookEl = document.getElementById('hook_title');
             const pbEl = document.getElementById('progress_bar');
@@ -1245,6 +1282,7 @@ http://127.0.0.1:8000/docs</div>
                 stacked_facecam_height: getSafeFacecamHeight(),
                 aspect_ratio: ar ? ar.value : '9:16',
                 solo_align: alignEl ? alignEl.value : 'center',
+                face_priority_mode: fpEl ? fpEl.value : 'auto_speaker',
                 burn_subtitles: document.getElementById('burn_subtitles').checked,
                 hook_title: (hookEl && hookEl.value) ? hookEl.value.trim() : null,
                 progress_bar: pbEl ? pbEl.checked : false,
@@ -1727,6 +1765,212 @@ http://127.0.0.1:8000/docs</div>
             }
         }
 
+        let currentFocusCenterXRatio = null;
+
+        function updateFacePriorityUI(st) {
+            if (!st) return;
+            const sel = document.getElementById('face_priority_mode');
+            const pill = document.getElementById('face-priority-status-pill');
+            const badge = document.getElementById('face-priority-active-badge');
+            const thumb = document.getElementById('face-priority-thumb');
+            const nameEl = document.getElementById('face-priority-name');
+
+            if (sel && st.mode) sel.value = st.mode;
+            const modeLabels = {
+                auto_speaker: 'Falante Ativo',
+                target_face: 'Rosto Prioritário',
+                largest_face: 'Maior Rosto',
+                off: 'Manual',
+            };
+            if (pill) {
+                pill.textContent = modeLabels[st.mode] || 'Ativo';
+                pill.className = st.mode === 'off' ? 'pill-tag pill-new' : 'pill-tag pill-saved';
+            }
+            if (badge) {
+                if (st.has_target && st.target_thumbnail) {
+                    badge.style.display = 'flex';
+                    if (thumb) thumb.src = st.target_thumbnail;
+                    if (nameEl) nameEl.textContent = st.target_name || 'Destaque Principal';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+
+        async function loadFacePriorityState() {
+            try {
+                const st = await api('/api/v1/studio/faces/priority');
+                updateFacePriorityUI(st);
+            } catch (_) {}
+        }
+
+        async function changeFacePriorityMode(newMode) {
+            try {
+                const st = await api('/api/v1/studio/faces/priority', {
+                    method: 'POST',
+                    body: JSON.stringify({ mode: newMode }),
+                });
+                updateFacePriorityUI(st);
+                setStatus(`Modo de destaque facial alterado para: ${newMode === 'target_face' ? 'Rosto Prioritário' : (newMode === 'auto_speaker' ? 'Quem está falando' : newMode)}.`, 'idle');
+            } catch (err) {
+                setStatus(`Erro ao atualizar modo facial: ${err.message}`, 'err');
+            }
+        }
+
+        async function clearFacePriorityTarget() {
+            try {
+                const st = await api('/api/v1/studio/faces/priority', {
+                    method: 'POST',
+                    body: JSON.stringify({ clear_target: true }),
+                });
+                currentFocusCenterXRatio = null;
+                updateFacePriorityUI(st);
+                setStatus('Rosto prioritário removido. Modo retornou para Falante Ativo.', 'idle');
+            } catch (err) {
+                setStatus(`Erro ao limpar destaque: ${err.message}`, 'err');
+            }
+        }
+
+        async function uploadReferenceFaceFile(file) {
+            if (!file) return;
+            setStatus(`Analisando rosto na foto "${file.name}"...`, 'busy', 40);
+            try {
+                const labelName = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Destaque Principal';
+                const resp = await fetch(`/api/v1/studio/faces/upload-reference?name=${encodeURIComponent(labelName)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: file,
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.detail || `Erro ${resp.status}`);
+                updateFacePriorityUI(data.priority_state);
+                setStatus(`Rosto prioritário "${labelName}" cadastrado com sucesso! O programa agora prioriza esta pessoa.`, 'idle');
+            } catch (err) {
+                setStatus(`Falha ao cadastrar foto de referência: ${err.message}`, 'err');
+            }
+        }
+
+        function renderDetectedFacesGallery(faces) {
+            const gal = document.getElementById('detected-faces-gallery');
+            if (!gal) return;
+            gal.textContent = '';
+            if (!Array.isArray(faces) || faces.length === 0) {
+                gal.style.display = 'none';
+                return;
+            }
+            gal.style.display = 'flex';
+
+            faces.forEach((f, idx) => {
+                const img = el('img', {
+                    src: f.thumbnail_data_url || '',
+                    alt: `Rosto ${idx + 1}`,
+                });
+                img.style.width = '46px';
+                img.style.height = '46px';
+                img.style.borderRadius = '50%';
+                img.style.objectFit = 'cover';
+                img.style.border = f.is_priority_match ? '2px solid #10B981' : '1px solid var(--line)';
+
+                const simTxt = f.similarity !== null && f.similarity !== undefined
+                    ? ` · ${Math.round(Math.max(0, f.similarity) * 100)}% similar`
+                    : '';
+                const title = el('strong', {
+                    textContent: `Pessoa #${idx + 1} (${f.position_label})${f.is_priority_match ? ' ★' : ''}`,
+                });
+                title.style.fontSize = '12.5px';
+                const meta = el('div', {
+                    className: 'suggestion-meta',
+                    textContent: `Posição X: ${Math.round((f.center_x_ratio || 0.5) * 100)}%${simTxt}`,
+                });
+
+                const btnPrioritize = el('button', {
+                    type: 'button',
+                    className: 'clip-btn-play',
+                    textContent: 'Priorizar pessoa',
+                });
+                btnPrioritize.style.fontSize = '11.5px';
+                btnPrioritize.style.padding = '4px 8px';
+                btnPrioritize.addEventListener('click', async () => {
+                    try {
+                        const targetName = `Destaque (${f.position_label})`;
+                        const st = await api('/api/v1/studio/faces/priority', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                mode: 'target_face',
+                                target_name: targetName,
+                                target_embedding: f.embedding,
+                                target_thumbnail: f.thumbnail_data_url,
+                            }),
+                        });
+                        updateFacePriorityUI(st);
+                        currentFocusCenterXRatio = f.center_x_ratio;
+                        if (f.solo_align) document.getElementById('solo_align').value = f.solo_align;
+                        if (f.facecam_rect) {
+                            document.getElementById('fc_x').value = f.facecam_rect.x;
+                            document.getElementById('fc_y').value = f.facecam_rect.y;
+                            document.getElementById('fc_w').value = f.facecam_rect.w;
+                            document.getElementById('fc_h').value = f.facecam_rect.h;
+                            drawFacecamCanvas();
+                        }
+                        setStatus(`Pessoa #${idx + 1} (${f.position_label}) definida como Rosto Prioritário em toda a clipagem!`, 'idle');
+                    } catch (err) {
+                        setStatus(`Erro ao priorizar pessoa: ${err.message}`, 'err');
+                    }
+                });
+
+                const card = el('div', { className: 'clip-item' }, [
+                    el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
+                        img,
+                        el('div', {}, [title, meta]),
+                    ]),
+                    btnPrioritize,
+                ]);
+                card.style.flex = '1 1 230px';
+                card.style.padding = '8px 10px';
+                gal.appendChild(card);
+            });
+        }
+
+        async function detectFacesInCurrentScene() {
+            const videoPath = document.getElementById('video_path').value.trim();
+            const sp = document.getElementById('source-player');
+            const ts = (sp && sp.currentTime) ? sp.currentTime : (parseFloat(document.getElementById('inicio_s').value) || 0.5);
+            const useLive = Boolean(liveRunningState || !videoPath);
+            const btn = document.getElementById('btn-detect-faces-scene');
+            if (btn) btn.disabled = true;
+            setStatus(useLive ? 'Detectando rostos no buffer da live ativa...' : 'Detectando rostos no frame atual...', 'busy', 35);
+            try {
+                const data = await api('/api/v1/studio/faces/detect', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        video_path: videoPath || null,
+                        timestamp_s: ts,
+                        use_live_buffer: useLive,
+                    }),
+                });
+                srcWidth = data.source_width || 1920;
+                srcHeight = data.source_height || 1080;
+                if (data.facecam_rect) {
+                    document.getElementById('fc_x').value = data.facecam_rect.x;
+                    document.getElementById('fc_y').value = data.facecam_rect.y;
+                    document.getElementById('fc_w').value = data.facecam_rect.w;
+                    document.getElementById('fc_h').value = data.facecam_rect.h;
+                }
+                if (data.solo_align) {
+                    document.getElementById('solo_align').value = data.solo_align;
+                }
+                if (data.focus_center_x_ratio !== undefined) {
+                    currentFocusCenterXRatio = data.focus_center_x_ratio;
+                }
+                renderDetectedFacesGallery(data.faces || []);
+                setStatus(data.message || `${(data.faces || []).length} rosto(s) detectado(s). Clique em "Priorizar pessoa" para fixar o destaque.`, 'idle');
+            } catch (err) {
+                setStatus(`Falha na detecção facial: ${err.message}`, 'err');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
         async function loadSourcePreview() {
             const videoPath = document.getElementById('video_path').value.trim();
             const inicioS = parseFloat(document.getElementById('inicio_s').value) || 0;
@@ -1748,6 +1992,9 @@ http://127.0.0.1:8000/docs</div>
                     document.getElementById('fc_y').value = fc.y;
                     document.getElementById('fc_w').value = fc.w;
                     document.getElementById('fc_h').value = fc.h;
+                }
+                if (data.facecam_suggestion && data.facecam_suggestion.faces) {
+                    renderDetectedFacesGallery(data.facecam_suggestion.faces);
                 }
                 const wrap = document.getElementById('facecam-canvas-wrap');
                 const canvas = document.getElementById('facecam-canvas');
@@ -1988,6 +2235,7 @@ http://127.0.0.1:8000/docs</div>
                         stacked_facecam_height: getSafeFacecamHeight(),
                         aspect_ratio: document.getElementById('aspect_ratio').value,
                         solo_align: document.getElementById('solo_align').value,
+                        face_priority_mode: document.getElementById('face_priority_mode') ? document.getElementById('face_priority_mode').value : 'auto_speaker',
                         words: transcribedWords,
                         subtitles_are_absolute: Array.isArray(transcribedWords) && transcribedWords.length > 0,
                         subtitle_preset: document.getElementById('subtitle_preset').value,
@@ -2076,6 +2324,8 @@ http://127.0.0.1:8000/docs</div>
                         stacked_facecam_height: getSafeFacecamHeight(),
                         aspect_ratio: document.getElementById('aspect_ratio').value,
                         solo_align: document.getElementById('solo_align').value,
+                        face_priority_mode: document.getElementById('face_priority_mode') ? document.getElementById('face_priority_mode').value : 'auto_speaker',
+                        focus_center_x_ratio: currentFocusCenterXRatio,
                         subtitle_text: useRealWords ? null : editedText,
                         edited_clip_text: editedText || null,
                         hook_title: hookTitle || null,
@@ -2425,6 +2675,33 @@ http://127.0.0.1:8000/docs</div>
             document.getElementById('btn-refresh-clips').addEventListener('click', loadClipsList);
             document.getElementById('btn-save-result').addEventListener('click', saveClipResult);
 
+            const fpModeEl = document.getElementById('face_priority_mode');
+            if (fpModeEl) {
+                fpModeEl.addEventListener('change', (e) => changeFacePriorityMode(e.target.value));
+            }
+            const btnDetectFacesEl = document.getElementById('btn-detect-faces-scene');
+            if (btnDetectFacesEl) {
+                btnDetectFacesEl.addEventListener('click', detectFacesInCurrentScene);
+            }
+            const btnUploadFaceRefEl = document.getElementById('btn-upload-face-ref');
+            const faceRefInputEl = document.getElementById('face-ref-upload');
+            if (btnUploadFaceRefEl && faceRefInputEl) {
+                btnUploadFaceRefEl.addEventListener('click', () => faceRefInputEl.click());
+                faceRefInputEl.addEventListener('change', (e) => {
+                    const f = e.target.files && e.target.files[0];
+                    if (f) uploadReferenceFaceFile(f);
+                    e.target.value = '';
+                });
+            }
+            const btnClearFpEl = document.getElementById('btn-clear-face-priority');
+            if (btnClearFpEl) {
+                btnClearFpEl.addEventListener('click', clearFacePriorityTarget);
+            }
+            const soloAlignEl = document.getElementById('solo_align');
+            if (soloAlignEl) {
+                soloAlignEl.addEventListener('change', () => { currentFocusCenterXRatio = null; });
+            }
+
             const canvas = document.getElementById('facecam-canvas');
             const updateBoxFromPointer = (e) => {
                 const rect = canvas.getBoundingClientRect();
@@ -2484,6 +2761,7 @@ http://127.0.0.1:8000/docs</div>
             if (['studio', 'results', 'control'].includes(hashTab)) switchTab(hashTab);
             loadSystemStatus();
             loadStorageStats();
+            loadFacePriorityState();
             loadSourcesList();
             loadClipsList();
             loadPresetsList();

@@ -9,6 +9,10 @@ ROOT = Path(os.path.abspath(SPECPATH))
 datas = [
     (str(ROOT / "fastclipper" / "web" / "studio.html"), "fastclipper/web"),
     (str(ROOT / "face_detector.tflite"), "."),
+    (
+        str(ROOT / "fastclipper" / "assets" / "models" / "face_detection_yunet_2023mar.onnx"),
+        "fastclipper/assets/models",
+    ),
 ]
 binaries = []
 hiddenimports = (
@@ -16,6 +20,7 @@ hiddenimports = (
     + collect_submodules("uvicorn")
     + collect_submodules("fastapi")
     + collect_submodules("pydantic")
+    + ["cv2"]
 )
 
 # Empacota ffmpeg, ffprobe e yt-dlp se presentes no ambiente

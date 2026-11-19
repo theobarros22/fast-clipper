@@ -440,13 +440,29 @@ class LiveClipSession:
     def _evaluate_auto_clip_trigger(self, seg_path: Path) -> Optional[str]:
         """Avalia pico de áudio relativo à média móvel e, em thread separada, palavras-chave."""
         max_db = _measure_segment_volume_db(self.ffmpeg_bin, seg_path)
+        target_emb = self.default_render_opts.get("target_face_embedding")
+        face_mode = str(self.default_render_opts.get("face_priority_mode") or "off")
+        face_matched = False
+        if face_mode == "target_face" and target_emb:
+            try:
+                from fastclipper.layouts.facecam_detector import FacecamDetector
+
+                f_score = FacecamDetector().score_clip_face_priority(seg_path, timestamp_s=0.5, target_embedding=target_emb)
+                face_matched = bool(f_score.get("priority_matched"))
+            except Exception:
+                face_matched = False
+
         if max_db is not None:
-            is_spike = max_db > self.auto_clip_threshold_db
+            effective_thresh = (self.auto_clip_threshold_db - 3.5) if face_matched else self.auto_clip_threshold_db
+            is_spike = max_db > effective_thresh
             if len(self._recent_db_history) >= 3:
                 moving_avg = sum(self._recent_db_history) / len(self._recent_db_history)
-                is_spike = is_spike and (max_db >= moving_avg + 3.0)
+                req_delta = 1.5 if face_matched else 3.0
+                is_spike = is_spike and (max_db >= moving_avg + req_delta)
             self._recent_db_history.append(max_db)
             if is_spike:
+                if face_matched:
+                    return f"Auto Destaque Facial ({max_db:.1f} dB)"
                 return f"Auto Pico ({max_db:.1f} dB)"
 
         if self.auto_clip_keywords and self.transcribe_fn is not None:
@@ -657,6 +673,8 @@ class LiveClipSession:
                 "stacked_facecam_height": int(opts.get("stacked_facecam_height", 720)),
                 "aspect_ratio": opts.get("aspect_ratio", "9:16"),
                 "solo_align": opts.get("solo_align", "center"),
+                "face_priority_mode": opts.get("face_priority_mode", "off"),
+                "target_face_embedding": opts.get("target_face_embedding"),
                 "subtitles": subtitles_words,
                 "subtitles_are_absolute": False,
                 "subtitle_preset": opts.get("subtitle_preset", "minimal_clean"),

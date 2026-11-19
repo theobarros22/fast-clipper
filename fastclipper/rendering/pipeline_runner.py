@@ -200,6 +200,40 @@ class PipelineRunner:
             r = params["gameplay_rect"]
             gp_rect = Rectangle(int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"]))
 
+        # 2.1 Reconhecimento Facial & Priorização Automática de Destaque (quando ativo em 9:16)
+        face_priority_mode = str(params.get("face_priority_mode") or "off").strip().lower()
+        target_face_embedding = params.get("target_face_embedding")
+        focus_center_x_ratio: Optional[float] = (
+            float(params["focus_center_x_ratio"])
+            if params.get("focus_center_x_ratio") is not None
+            else None
+        )
+        face_focus_meta: Optional[Dict[str, Any]] = None
+        effective_solo_align = str(params.get("solo_align", "center") or "center")
+
+        if not is_16x9 and face_priority_mode in ("auto_speaker", "target_face", "largest_face"):
+            try:
+                from fastclipper.layouts.facecam_detector import FacecamDetector
+
+                focus_res = FacecamDetector().resolve_clip_focus(
+                    video_path=video_path,
+                    inicio_s=inicio_s,
+                    fim_s=fim_s,
+                    priority_mode=face_priority_mode,
+                    target_embedding=target_face_embedding,
+                )
+                face_focus_meta = focus_res
+                if focus_res.get("detected"):
+                    if focus_center_x_ratio is None and focus_res.get("focus_center_x_ratio") is not None:
+                        focus_center_x_ratio = float(focus_res["focus_center_x_ratio"])
+                    if focus_res.get("solo_align"):
+                        effective_solo_align = str(focus_res["solo_align"])
+                    if mode == LayoutMode.STACKED and fc_rect is None and focus_res.get("facecam_rect"):
+                        fr = focus_res["facecam_rect"]
+                        fc_rect = Rectangle(int(fr["x"]), int(fr["y"]), int(fr["w"]), int(fr["h"]))
+            except Exception as exc:
+                logger.warning("Falha na resolução de foco facial automático: %s", exc)
+
         layout_config = ChannelLayoutConfig(
             channel_id=params.get("channel_id", "default_channel"),
             mode=mode,
@@ -288,7 +322,8 @@ class PipelineRunner:
             watermark_text=params.get("watermark_text"),
             cancel_event=cancel_event,
             error_out=ffmpeg_errors,
-            solo_align=str(params.get("solo_align", "center") or "center"),
+            solo_align=effective_solo_align,
+            focus_center_x_ratio=focus_center_x_ratio,
         )
 
         if not render_ok or not caminho_saida.exists():
@@ -336,6 +371,7 @@ class PipelineRunner:
                 "layout": mode.value,
                 "subtitles_burned": burn_subtitles,
                 "file_size_bytes": caminho_saida.stat().st_size,
+                "face_focus": face_focus_meta,
             },
         )
 
@@ -469,6 +505,7 @@ class PipelineRunner:
         cancel_event: Optional[threading.Event] = None,
         error_out: Optional[List[str]] = None,
         solo_align: str = "center",
+        focus_center_x_ratio: Optional[float] = None,
     ) -> bool:
         """Renderiza via núcleo unificado render_core com suporte a layout 9:16 e legenda ASS."""
         return render_vertical_ffmpeg(
@@ -488,6 +525,7 @@ class PipelineRunner:
             watermark_text=watermark_text,
             error_out=error_out,
             solo_align=solo_align,
+            focus_center_x_ratio=focus_center_x_ratio,
         )
 
     def _parse_subtitles_data(

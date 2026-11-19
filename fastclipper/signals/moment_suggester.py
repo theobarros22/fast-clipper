@@ -107,6 +107,8 @@ class MomentSuggester:
         words: Optional[List[Dict[str, Any]]] = None,
         target_duration_s: float = 25.0,
         top_k: int = 5,
+        target_face_embedding: Optional[List[float]] = None,
+        boost_by_face: bool = False,
     ) -> List[Dict[str, Any]]:
         """Retorna top_k sugestões com pontuação, justificativa e limites alinhados a frases."""
         if top_k < 1 or target_duration_s < 1.0:
@@ -208,6 +210,7 @@ class MomentSuggester:
         # Ordena por maior score e remove sobreposições > 50%
         scored.sort(key=lambda x: x["score"], reverse=True)
         selected: List[Dict[str, Any]] = []
+        pool_limit = max(top_k * 2, top_k + 3) if (boost_by_face or target_face_embedding) else top_k
         for cand in scored:
             overlaps = False
             for kept in selected:
@@ -218,7 +221,29 @@ class MomentSuggester:
                     break
             if not overlaps:
                 selected.append(cand)
-            if len(selected) >= top_k:
+            if len(selected) >= pool_limit:
                 break
 
-        return selected
+        if (boost_by_face or target_face_embedding) and selected:
+            try:
+                from fastclipper.layouts.facecam_detector import FacecamDetector
+
+                detector = FacecamDetector()
+                for cand in selected:
+                    mid_t = (float(cand["inicio_s"]) + float(cand["fim_s"])) / 2.0
+                    f_res = detector.score_clip_face_priority(
+                        video_path=video_path,
+                        timestamp_s=mid_t,
+                        target_embedding=target_face_embedding,
+                    )
+                    boost = float(f_res.get("boost") or 0.0)
+                    if boost > 0.0:
+                        cand["score"] = round(min(1.0, float(cand["score"]) + boost), 3)
+                        cand["face_priority_matched"] = bool(f_res.get("priority_matched"))
+                        if f_res.get("reason"):
+                            cand["reason"] = f"{cand['reason']} + {f_res['reason']}"
+                selected.sort(key=lambda x: x["score"], reverse=True)
+            except Exception:
+                pass
+
+        return selected[:top_k]

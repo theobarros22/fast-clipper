@@ -35,7 +35,7 @@ from fastclipper.live.live_manager import LiveManager
 from fastclipper.live.youtube_live import SecuritySSRFError
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangle
 from fastclipper.layouts.engine import LayoutEngine
-from fastclipper.layouts.facecam_detector import FacecamDetector
+from fastclipper.layouts.facecam_detector import FacecamDetector, FacePriorityStore
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.encoder import HardwareEncoderManager
 from fastclipper.rendering.pipeline_runner import PipelineRunner
@@ -135,6 +135,7 @@ live_manager = LiveManager(
 )
 package_exporter = PackageExporter(exports_root=DATA_DIR / "exports")
 subtitle_engine = SubtitleEngine()
+face_priority_store = FacePriorityStore(DATA_DIR / "face_priority.json")
 
 # Registra organização e usuário padrão para demonstração imediata
 collab_service.register_organization(org_id="org_default", nome="Agência Alfa", slug="alfa")
@@ -245,6 +246,8 @@ class StudioRenderRequest(BaseModel):
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
     solo_align: Literal["left", "center", "right"] = "center"
+    face_priority_mode: Optional[str] = None
+    focus_center_x_ratio: Optional[float] = None
     subtitle_text: Optional[str] = None
     edited_clip_text: Optional[str] = None
     hook_title: Optional[str] = None
@@ -303,6 +306,7 @@ class LiveStartRequest(BaseModel):
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
     solo_align: Literal["left", "center", "right"] = "center"
+    face_priority_mode: Optional[str] = None
     burn_subtitles: bool = False
     hook_title: Optional[str] = None
     progress_bar: bool = False
@@ -333,6 +337,7 @@ class LiveMarkRequest(BaseModel):
     stacked_facecam_height: Optional[int] = None
     aspect_ratio: Optional[str] = None
     solo_align: Optional[Literal["left", "center", "right"]] = None
+    face_priority_mode: Optional[str] = None
     burn_subtitles: Optional[bool] = None
     hook_title: Optional[str] = None
     progress_bar: Optional[bool] = None
@@ -365,6 +370,7 @@ class LiveSettingsRequest(BaseModel):
     stacked_facecam_height: Optional[int] = None
     aspect_ratio: Optional[str] = None
     solo_align: Optional[Literal["left", "center", "right"]] = None
+    face_priority_mode: Optional[str] = None
     burn_subtitles: Optional[bool] = None
     hook_title: Optional[str] = None
     progress_bar: Optional[bool] = None
@@ -449,6 +455,7 @@ class BatchRenderRequest(BaseModel):
     stacked_facecam_height: int = 720
     aspect_ratio: str = "9:16"
     solo_align: Literal["left", "center", "right"] = "center"
+    face_priority_mode: Optional[str] = None
     words: Optional[List[Dict[str, Any]]] = None
     subtitles_are_absolute: bool = False
     subtitle_preset: str = "viral_bounce"
@@ -468,6 +475,21 @@ class BatchRenderRequest(BaseModel):
     @classmethod
     def _val_preset(cls, v: str) -> str:
         return _check_subtitle_preset(v)
+
+
+class FacePriorityUpdateRequest(BaseModel):
+    mode: Optional[Literal["off", "auto_speaker", "target_face", "largest_face"]] = None
+    target_name: Optional[str] = None
+    target_embedding: Optional[List[float]] = None
+    target_thumbnail: Optional[str] = None
+    clear_target: bool = False
+    auto_boost_moments: Optional[bool] = None
+
+
+class DetectFacesRequest(BaseModel):
+    video_path: Optional[str] = None
+    timestamp_s: float = 0.0
+    use_live_buffer: bool = False
 
 
 class GenerateCopyRequest(BaseModel):
@@ -919,7 +941,13 @@ def studio_preview_frame(req: PreviewFrameRequest):
     suggestion = None
     if req.detect_facecam:
         detector = FacecamDetector()
-        suggestion = detector.detect_from_image(img_path, info["source_width"], info["source_height"])
+        target_emb = face_priority_store.get_state().get("target_embedding")
+        suggestion = detector.detect_from_image(
+            img_path,
+            info["source_width"],
+            info["source_height"],
+            target_embedding=target_emb,
+        )
 
     return {
         "image_url": f"/api/v1/studio/preview-image/{img_name}",
@@ -927,6 +955,140 @@ def studio_preview_frame(req: PreviewFrameRequest):
         "source_height": info["source_height"],
         "timestamp_s": info["timestamp_s"],
         "facecam_suggestion": suggestion,
+    }
+
+
+@app.get("/api/v1/studio/faces/priority", tags=["Studio Face Priority"])
+def studio_get_face_priority():
+    """Retorna a configuração atual de reconhecimento facial e pessoa em destaque."""
+    return face_priority_store.get_state()
+
+
+@app.post("/api/v1/studio/faces/priority", tags=["Studio Face Priority"])
+def studio_set_face_priority(req: FacePriorityUpdateRequest):
+    """Atualiza o modo de prioridade facial e/ou salva a assinatura do rosto prioritário."""
+    state = face_priority_store.update(
+        mode=req.mode,
+        target_name=req.target_name,
+        target_embedding=req.target_embedding,
+        target_thumbnail=req.target_thumbnail,
+        clear_target=req.clear_target,
+        auto_boost_moments=req.auto_boost_moments,
+    )
+    session = live_manager.current_session
+    if session:
+        session.update_settings(
+            default_render_opts={
+                "face_priority_mode": state["mode"],
+                "target_face_embedding": state.get("target_embedding"),
+            }
+        )
+    return state
+
+
+@app.post("/api/v1/studio/faces/detect", tags=["Studio Face Priority"])
+def studio_detect_faces(req: DetectFacesRequest):
+    """Detecta todos os rostos no frame do vídeo ou no último segmento da live ativa."""
+    target_video: Optional[Path] = None
+    ts = req.timestamp_s
+
+    if req.use_live_buffer or not (req.video_path or "").strip():
+        session = live_manager.current_session
+        if session and session.segments_dir.is_dir():
+            segs = sorted(session.segments_dir.glob("seg_*.ts"))
+            if len(segs) >= 2:
+                target_video = segs[-2]
+            elif len(segs) == 1:
+                target_video = segs[0]
+            ts = 0.5
+
+    if target_video is None:
+        if not req.video_path or not req.video_path.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Informe um vídeo local ou inicie uma transmissão ao vivo para detectar rostos na cena.",
+            )
+        target_video = validate_input_path(req.video_path)
+
+    previews_dir = pipeline_runner.output_dir / "_previews"
+    previews_dir.mkdir(parents=True, exist_ok=True)
+    img_name = f"faces_{int(time.time() * 1000)}.jpg"
+    img_path = previews_dir / img_name
+
+    engine = LayoutEngine()
+    try:
+        info = engine.extract_source_frame(target_video, ts, img_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Falha ao extrair frame para detecção facial: {exc}")
+
+    detector = FacecamDetector()
+    target_emb = face_priority_store.get_state().get("target_embedding")
+    res = detector.detect_from_image(
+        img_path,
+        info["source_width"],
+        info["source_height"],
+        target_embedding=target_emb,
+    )
+    return {
+        "image_url": f"/api/v1/studio/preview-image/{img_name}",
+        "source_width": info["source_width"],
+        "source_height": info["source_height"],
+        "timestamp_s": info["timestamp_s"],
+        **res,
+    }
+
+
+@app.post("/api/v1/studio/faces/upload-reference", tags=["Studio Face Priority"])
+async def studio_upload_reference_face(
+    request: Request,
+    name: str = Query("Destaque Principal"),
+):
+    """Recebe uma foto de referência da pessoa que terá destaque, extrai o embedding facial e ativa prioridade."""
+    raw_bytes = await request.body()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Nenhuma imagem enviada.")
+    if len(raw_bytes) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Imagem excede o limite de 15 MB.")
+
+    try:
+        import cv2  # type: ignore
+        import numpy as np  # type: ignore
+    except ImportError:
+        raise HTTPException(status_code=500, detail="OpenCV não disponível no servidor.")
+
+    arr = np.frombuffer(raw_bytes, dtype=np.uint8)
+    img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img_bgr is None:
+        raise HTTPException(status_code=400, detail="Formato de imagem inválido. Use JPG, PNG ou WebP.")
+
+    detector = FacecamDetector()
+    faces = detector.detect_faces_in_frame(img_bgr, include_thumbnails=True)
+    if not faces:
+        raise HTTPException(
+            status_code=400,
+            detail="Nenhum rosto nítido foi detectado na foto enviada. Escolha uma foto frontal onde o rosto apareça claramente.",
+        )
+
+    best = faces[0]
+    state = face_priority_store.update(
+        mode="target_face",
+        target_name=name,
+        target_embedding=best["embedding"],
+        target_thumbnail=best["thumbnail_data_url"],
+    )
+    session = live_manager.current_session
+    if session:
+        session.update_settings(
+            default_render_opts={
+                "face_priority_mode": state["mode"],
+                "target_face_embedding": state.get("target_embedding"),
+            }
+        )
+    return {
+        "registered": True,
+        "faces_found": len(faces),
+        "selected_face": {k: v for k, v in best.items() if k != "embedding"},
+        "priority_state": state,
     }
 
 
@@ -1013,6 +1175,8 @@ def studio_suggest_moments(req: SuggestMomentsRequest):
         raise HTTPException(status_code=400, detail=probe.message)
 
     suggester = MomentSuggester()
+    fp_state = face_priority_store.get_state()
+    use_face_boost = bool(fp_state.get("auto_boost_moments", True) and fp_state.get("mode") != "off")
     try:
         suggestions = suggester.suggest(
             video_path=safe_path,
@@ -1020,6 +1184,8 @@ def studio_suggest_moments(req: SuggestMomentsRequest):
             words=req.words,
             target_duration_s=req.target_duration_s,
             top_k=req.top_k,
+            target_face_embedding=fp_state.get("target_embedding") if use_face_boost else None,
+            boost_by_face=use_face_boost,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -1061,6 +1227,8 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
     if not req.items:
         raise HTTPException(status_code=400, detail="Nenhum corte informado para o lote.")
 
+    fp_state = face_priority_store.get_state()
+    eff_face_mode = req.face_priority_mode if req.face_priority_mode is not None else fp_state.get("mode", "off")
     job_ids: List[str] = []
     for idx, item in enumerate(req.items):
         params = {
@@ -1073,6 +1241,8 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
             "stacked_facecam_height": req.stacked_facecam_height,
             "aspect_ratio": req.aspect_ratio,
             "solo_align": req.solo_align,
+            "face_priority_mode": eff_face_mode,
+            "target_face_embedding": fp_state.get("target_embedding"),
             "subtitles": req.words,
             "subtitles_are_absolute": req.subtitles_are_absolute,
             "subtitle_preset": req.subtitle_preset,
@@ -1111,6 +1281,8 @@ def studio_render_batch(req: BatchRenderRequest, background_tasks: BackgroundTas
 def studio_live_start(req: LiveStartRequest):
     """Inicia captura contínua ao vivo (YouTube, X, Twitch ou Kick) em buffer segmentado."""
     try:
+        fp_state = face_priority_store.get_state()
+        eff_face_mode = req.face_priority_mode if req.face_priority_mode is not None else fp_state.get("mode", "off")
         render_opts = {
             "layout": req.layout,
             "facecam_rect": req.facecam_rect,
@@ -1118,7 +1290,12 @@ def studio_live_start(req: LiveStartRequest):
             "stacked_facecam_height": req.stacked_facecam_height,
             "aspect_ratio": req.aspect_ratio,
             "solo_align": req.solo_align,
+            "face_priority_mode": eff_face_mode,
+            "target_face_embedding": fp_state.get("target_embedding"),
             "burn_subtitles": req.burn_subtitles,
+            "hook_title": req.hook_title,
+            "progress_bar": req.progress_bar,
+            "enhance_voice": req.enhance_voice,
             "subtitle_preset": req.subtitle_preset,
             "language": req.language,
             "normalize_audio": req.normalize_audio,
@@ -1167,7 +1344,11 @@ def studio_live_monitor_stream():
 @app.patch("/api/v1/studio/live/settings", tags=["Studio Live"])
 def studio_live_update_settings(req: LiveSettingsRequest):
     """Atualiza modo de auto-clipping, gatilhos e opções de renderização sem interromper a captura."""
-    render_opts: Dict[str, Any] = {}
+    fp_state = face_priority_store.get_state()
+    render_opts: Dict[str, Any] = {
+        "face_priority_mode": req.face_priority_mode or fp_state.get("mode", "off"),
+        "target_face_embedding": fp_state.get("target_embedding"),
+    }
     for key in (
         "layout",
         "facecam_rect",
@@ -1175,6 +1356,7 @@ def studio_live_update_settings(req: LiveSettingsRequest):
         "stacked_facecam_height",
         "aspect_ratio",
         "solo_align",
+        "face_priority_mode",
         "burn_subtitles",
         "hook_title",
         "progress_bar",
@@ -1203,7 +1385,11 @@ def studio_live_update_settings(req: LiveSettingsRequest):
 @app.post("/api/v1/studio/live/mark", tags=["Studio Live"])
 def studio_live_mark(req: LiveMarkRequest):
     """Cria um corte instantâneo dos últimos segundos do buffer ou agenda marcação com janela posterior."""
-    render_opts: Dict[str, Any] = {}
+    fp_state = face_priority_store.get_state()
+    render_opts: Dict[str, Any] = {
+        "face_priority_mode": req.face_priority_mode or fp_state.get("mode", "off"),
+        "target_face_embedding": fp_state.get("target_embedding"),
+    }
     for key in (
         "layout",
         "facecam_rect",
@@ -1211,6 +1397,7 @@ def studio_live_mark(req: LiveMarkRequest):
         "stacked_facecam_height",
         "aspect_ratio",
         "solo_align",
+        "face_priority_mode",
         "burn_subtitles",
         "hook_title",
         "progress_bar",
@@ -1435,6 +1622,8 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
                 })
             subtitles_are_absolute = False
 
+    fp_state = face_priority_store.get_state()
+    eff_face_mode = req.face_priority_mode if req.face_priority_mode is not None else fp_state.get("mode", "off")
     params = {
         "video_path": str(safe_path),
         "inicio_s": req.inicio_s,
@@ -1445,6 +1634,9 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
         "stacked_facecam_height": req.stacked_facecam_height,
         "aspect_ratio": req.aspect_ratio,
         "solo_align": req.solo_align,
+        "face_priority_mode": eff_face_mode,
+        "target_face_embedding": fp_state.get("target_embedding"),
+        "focus_center_x_ratio": req.focus_center_x_ratio,
         "subtitles": subtitles_payload,
         "subtitles_are_absolute": subtitles_are_absolute,
         "subtitle_preset": req.subtitle_preset,

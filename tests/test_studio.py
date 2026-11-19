@@ -262,3 +262,70 @@ def test_live_split_hls_stream_resolution_and_ffmpeg_args(monkeypatch):
     assert "-map" in ffmpeg_args
     assert "0:v:0" in ffmpeg_args
     assert "1:a:0" in ffmpeg_args
+
+
+def test_face_priority_endpoints_and_focus_render():
+    """Valida endpoints de reconhecimento facial, cadastro de prioridade e foco horizontal 9:16."""
+    import numpy as np
+    from fastclipper.layouts.facecam_detector import compute_face_embedding, cosine_similarity
+
+    # 1. Embedding 128-D e similaridade cosseno
+    fake_img = np.zeros((240, 240, 3), dtype=np.uint8)
+    fake_img[60:180, 60:180] = (140, 175, 220)
+    fake_img[90:110, 80:160] = (30, 30, 30)
+    emb = compute_face_embedding(fake_img, (50, 50, 140, 140))
+    assert len(emb) == 128
+    assert cosine_similarity(emb, emb) >= 0.99
+
+    # 2. Cadastro e consulta de prioridade facial via API
+    res_set = client.post(
+        "/api/v1/studio/faces/priority",
+        json={
+            "mode": "target_face",
+            "target_name": "Apresentador Principal",
+            "target_embedding": emb,
+            "target_thumbnail": "data:image/jpeg;base64,AA==",
+        },
+    )
+    assert res_set.status_code == 200
+    st = res_set.json()
+    assert st["mode"] == "target_face"
+    assert st["has_target"] is True
+    assert st["target_name"] == "Apresentador Principal"
+
+    res_get = client.get("/api/v1/studio/faces/priority")
+    assert res_get.status_code == 200
+    assert res_get.json()["has_target"] is True
+
+    # 3. Detecção facial via endpoint /api/v1/studio/faces/detect
+    res_det = client.post(
+        "/api/v1/studio/faces/detect",
+        json={"video_path": str(SYNTHETIC_VIDEO), "timestamp_s": 0.5, "use_live_buffer": False},
+    )
+    assert res_det.status_code == 200
+    det_data = res_det.json()
+    assert "image_url" in det_data
+    assert "facecam_rect" in det_data
+    assert isinstance(det_data.get("faces"), list)
+
+    # 4. Renderização com focus_center_x_ratio explícito e face_priority_mode
+    res_render = client.post(
+        "/api/v1/studio/render-now",
+        json={
+            "video_path": str(SYNTHETIC_VIDEO),
+            "inicio_s": 0.0,
+            "fim_s": 1.0,
+            "layout": "solo",
+            "face_priority_mode": "auto_speaker",
+            "focus_center_x_ratio": 0.82,
+            "burn_subtitles": False,
+        },
+    )
+    assert res_render.status_code == 200
+    assert res_render.json()["success"] is True
+
+    # 5. Limpeza do alvo prioritário
+    res_clear = client.post("/api/v1/studio/faces/priority", json={"clear_target": True})
+    assert res_clear.status_code == 200
+    assert res_clear.json()["has_target"] is False
+    assert res_clear.json()["mode"] == "auto_speaker"
