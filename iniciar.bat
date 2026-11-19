@@ -10,6 +10,11 @@ echo [DICA] Deixe esta janela aberta enquanto estiver editando seus clipes.
 echo =====================================================================
 echo.
 cd /d "%~dp0"
+if not exist "%~dp0data\_tmp" mkdir "%~dp0data\_tmp"
+set "FASTCLIPPER_DATA_DIR=%~dp0data"
+set "TMP=%~dp0data\_tmp"
+set "TEMP=%~dp0data\_tmp"
+echo [INFO] Pasta de dados e buffers (Disco Local do Projeto): %FASTCLIPPER_DATA_DIR%
 if exist "dist\FastClipper\FastClipper.exe" (
     call "dist\FastClipper\FastClipper.exe"
 ) else if exist ".venv\Scripts\python.exe" (

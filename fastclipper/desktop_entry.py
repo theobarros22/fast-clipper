@@ -31,12 +31,23 @@ def _configure_frozen_environment() -> None:
             extra_bins.append(str(internal_dir))
         os.environ["PATH"] = os.pathsep.join(extra_bins) + os.pathsep + os.environ.get("PATH", "")
 
-        # Pasta de dados gravável (usa %LOCALAPPDATA%\FastClipper\data por padrão)
+        # Pasta de dados gravável: prioriza o mesmo disco do executável/projeto (ex.: L:\) para não ocupar o C:\
         if not os.environ.get("FASTCLIPPER_DATA_DIR"):
-            local_app = Path(os.environ.get("LOCALAPPDATA", Path.home()))
-            data_dir = (local_app / "FastClipper" / "data").resolve()
-            data_dir.mkdir(parents=True, exist_ok=True)
-            os.environ["FASTCLIPPER_DATA_DIR"] = str(data_dir)
+            repo_data = (exe_dir.parent.parent / "data").resolve()
+            local_data = (exe_dir / "data").resolve()
+            target_data = repo_data if (exe_dir.parent.name.lower() == "dist") else local_data
+            try:
+                target_data.mkdir(parents=True, exist_ok=True)
+                tmp_dir = target_data / "_tmp"
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+                os.environ["FASTCLIPPER_DATA_DIR"] = str(target_data)
+                os.environ["TMP"] = str(tmp_dir)
+                os.environ["TEMP"] = str(tmp_dir)
+            except OSError:
+                local_app = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+                data_dir = (local_app / "FastClipper" / "data").resolve()
+                data_dir.mkdir(parents=True, exist_ok=True)
+                os.environ["FASTCLIPPER_DATA_DIR"] = str(data_dir)
 
         # Garante que sys.stdout/sys.stderr sejam válidos mesmo se executado oculto/sem console
         try:
