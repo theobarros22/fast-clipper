@@ -1,0 +1,58 @@
+{
+  "_leia_me": "Copie este arquivo para data/autopilot/autopilot.json e preencha. Esse caminho fica fora do git (guarde as chaves só lá).",
+
+  "studio_url": "http://127.0.0.1:8000",
+  "page_handle": "@suapagina",
+  "language": "pt",
+
+  "max_video_minutes": 90,
+  "max_new_per_source": 1,
+  "clips_per_video": 3,
+  "clip_seconds": 25,
+  "min_score": 0.0,
+  "layout": "solo",
+  "subtitle_preset": "viral_bounce",
+  "normalize_audio": true,
+  "platforms": ["x", "reels", "tiktok", "shorts"],
+
+  "inbox_authorization_ref": "arquivo próprio ou autorizado (pasta de entrada)",
+
+  "watchlist": [
+    {
+      "name": "Nome do criador",
+      "url": "https://www.youtube.com/@CANAL/videos",
+      "authorization_ref": "DM aprovada em 19/11 / campanha Whop X",
+      "layout": "stacked",
+      "enabled": false
+    },
+    {
+      "name": "Streamer Twitch",
+      "url": "https://www.twitch.tv/CANAL/videos?filter=archives",
+      "authorization_ref": "permite clipes com crédito (regra do canal)",
+      "layout": "stacked",
+      "enabled": false
+    }
+  ],
+
+  "buffer": {
+    "api_key": "",
+    "mode": "queue",
+    "channels": {
+      "x": "",
+      "reels": "",
+      "tiktok": "",
+      "shorts": ""
+    }
+  },
+
+  "media_host": {
+    "type": "",
+    "endpoint_url": "https://SEU_ACCOUNT_ID.r2.cloudflarestorage.com",
+    "bucket": "fastclipper-clips",
+    "access_key_id": "",
+    "secret_access_key": "",
+    "region": "auto",
+    "prefix": "clips",
+    "public_base_url": "https://pub-XXXXXXXX.r2.dev"
+  }
+}

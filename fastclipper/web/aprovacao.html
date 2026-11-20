@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fila de aprovação · Fast Clipper</title>
+<style>
+  :root { --bg:#0d0f14; --panel:#151922; --line:#252b38; --text:#e8eaf0; --mute:#8b93a7;
+          --pink:#ff4f8b; --green:#3ddc97; --amber:#ffb547; --red:#ff5d5d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:rgba(13,15,20,.94); backdrop-filter:blur(8px);
+           border-bottom:1px solid var(--line); padding:14px 20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; letter-spacing:.2px; }
+  h1 b { color:var(--pink); }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { padding:4px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px; color:var(--mute); cursor:pointer; background:none; }
+  .chip.on { color:var(--text); border-color:var(--pink); }
+  .chip .n { color:var(--text); font-weight:600; margin-left:4px; }
+  .spacer { flex:1; }
+  button.act { background:var(--pink); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:600; cursor:pointer; }
+  button.act:disabled { opacity:.5; cursor:default; }
+  .warn { margin:14px 20px 0; padding:10px 14px; border:1px solid #4a3a1a; background:#211a0d; color:var(--amber); border-radius:8px; font-size:14px; }
+  main { padding:20px; display:grid; gap:18px; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  video { width:100%; aspect-ratio:9/16; background:#000; display:block; object-fit:contain; max-height:520px; }
+  .body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:8px; }
+  .meta { font-size:12.5px; color:var(--mute); display:flex; justify-content:space-between; gap:8px; }
+  .score { color:var(--green); font-weight:600; }
+  .hook { font-weight:650; font-size:15.5px; }
+  textarea { width:100%; min-height:78px; resize:vertical; background:#0f1219; color:var(--text);
+             border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; font-size:14px; }
+  .plats { display:flex; gap:10px; flex-wrap:wrap; font-size:13px; color:var(--mute); }
+  .plats label { display:flex; gap:4px; align-items:center; cursor:pointer; }
+  .row { display:flex; gap:8px; }
+  .row button { flex:1; border:0; border-radius:8px; padding:10px; font-weight:650; cursor:pointer; font-size:14px; }
+  .ok { background:var(--green); color:#062015; }
+  .no { background:#2a2f3c; color:var(--text); }
+  .log { font-size:12.5px; color:var(--mute); white-space:pre-wrap; word-break:break-word; }
+  .empty { grid-column:1/-1; text-align:center; color:var(--mute); padding:60px 0; }
+  .st { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
+  .st.agendado { color:var(--green); } .st.falhou { color:var(--red); } .st.aprovado { color:var(--amber); }
+  a { color:var(--pink); }
+</style>
+</head>
+<body>
+<header>
+  <h1><b>●</b> Fila de aprovação</h1>
+  <div class="chips" id="chips"></div>
+  <div class="spacer"></div>
+  <span id="runinfo" style="font-size:13px;color:var(--mute)"></span>
+  <button class="act" id="runbtn">Rodar ciclo agora</button>
+  <a href="/" style="font-size:13px">Studio</a>
+</header>
+<div id="warns"></div>
+<main id="grid"><div class="empty">Carregando…</div></main>
+
+<script>
+const STATUSES = [["pendente","Pendentes"],["agendado","Agendados"],["aprovado","Aprovados"],["falhou","Falharam"],["rejeitado","Rejeitados"]];
+let current = "pendente", platforms = [];
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = s => { s = Math.round(+s||0); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; };
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
+
+async function loadStatus() {
+  const s = await api("/api/v1/autopilot/status");
+  platforms = s.platforms || [];
+  const c = s.counts || {};
+  document.getElementById("chips").innerHTML = STATUSES.map(([k, l]) =>
+    `<button class="chip ${k===current?"on":""}" data-s="${k}">${l}<span class="n">${c[k]||0}</span></button>`).join("");
+  document.querySelectorAll(".chip").forEach(b => b.onclick = () => { current = b.dataset.s; refresh(); });
+  const w = [];
+  if (!s.config_found) w.push(`Sem configuração. Copie <b>autopilot.example.json</b> para <code>${esc(s.config_path)}</code>.`);
+  if (!s.buffer_ready) w.push("Buffer não configurado: aprovar só marca o clipe como pronto para você postar manualmente.");
+  else if (!s.media_host_ready) w.push("Buffer configurado, mas sem armazenamento público (media_host). O Buffer precisa de uma URL pública do MP4.");
+  w.push(`Pasta de entrada: <code>${esc(s.inbox_dir)}</code> (solte vídeos aqui para cortar).`);
+  document.getElementById("warns").innerHTML = w.map(x => `<div class="warn">${x}</div>`).join("");
+  const lr = s.last_run || {};
+  document.getElementById("runbtn").disabled = !!lr.running;
+  document.getElementById("runinfo").textContent = lr.running ? "Ciclo rodando…" :
+    lr.error ? "Último ciclo: " + lr.error : lr.summary ? `Último ciclo: ${lr.summary.new_candidates} clipes novos` : "";
+  return !!lr.running;
+}
+
+function card(c) {
+  const log = c.publish_log ? JSON.stringify(c.publish_log, null, 1) : "";
+  const canAct = ["pendente","aprovado","falhou"].includes(c.status);
+  return `<div class="card" id="${c.candidate_id}">
+    <video src="/api/v1/autopilot/video/${c.candidate_id}" controls preload="metadata" playsinline></video>
+    <div class="body">
+      <div class="meta"><span>${esc(c.source_name)} · ${fmt(c.inicio_s)}–${fmt(c.fim_s)}</span>
+        <span class="score">${c.score != null ? (Math.round(c.score*100)) + " pts" : ""}</span></div>
+      <div class="hook">${esc(c.hook)}</div>
+      <div class="meta"><span>${esc(c.reason)}</span>${c.status!=="pendente"?`<span class="st ${c.status}">${c.status}</span>`:""}</div>
+      ${canAct ? `<textarea>${esc(c.caption)}</textarea>
+      <div class="plats">${platforms.map(p => `<label><input type="checkbox" value="${p}" checked>${p}</label>`).join("")}</div>
+      <div class="row"><button class="ok">${c.status==="pendente"?"Aprovar":"Reenviar"}</button>
+        <button class="no">Rejeitar</button></div>` : ""}
+      ${log ? `<div class="log">${esc(log)}</div>` : ""}
+    </div></div>`;
+}
+
+async function refresh() {
+  const running = await loadStatus().catch(e => { console.error(e); return false; });
+  const list = await api(`/api/v1/autopilot/candidates?status=${current}`).catch(() => []);
+  const grid = document.getElementById("grid");
+  grid.innerHTML = list.length ? list.map(card).join("") : `<div class="empty">Nada em “${current}”.</div>`;
+  list.forEach(c => {
+    const el = document.getElementById(c.candidate_id);
+    const ok = el.querySelector(".ok"), no = el.querySelector(".no");
+    if (ok) ok.onclick = async () => {
+      ok.disabled = no.disabled = true; ok.textContent = "Enviando…";
+      const plats = [...el.querySelectorAll(".plats input:checked")].map(i => i.value);
+      try {
+        await api(`/api/v1/autopilot/candidates/${c.candidate_id}/approve`, {method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({caption: el.querySelector("textarea").value, platforms: plats})});
+      } catch (e) { alert(e.message); }
+      refresh();
+    };
+    if (no) no.onclick = async () => {
+      await api(`/api/v1/autopilot/candidates/${c.candidate_id}/reject`, {method:"POST"}).catch(e => alert(e.message));
+      el.remove(); loadStatus();
+    };
+  });
+  if (running) setTimeout(refresh, 8000);
+}
+
+document.getElementById("runbtn").onclick = async () => {
+  await api("/api/v1/autopilot/run-now", {method:"POST"}).catch(e => alert(e.message));
+  setTimeout(refresh, 800);
+};
+refresh();
+setInterval(() => { if (current === "pendente") loadStatus(); }, 30000);
+</script>
+</body>
+</html>

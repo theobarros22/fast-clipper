@@ -100,6 +100,11 @@ app = FastAPI(
 )
 
 
+from fastclipper.autopilot.routes import router as autopilot_router  # Piloto Automático
+
+app.include_router(autopilot_router)
+
+
 @app.middleware("http")
 async def local_security_guard(request: Request, call_next):
     """Protege o servidor local contra DNS rebinding e requisições cross-origin maliciosas."""

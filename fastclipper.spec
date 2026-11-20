@@ -8,6 +8,7 @@ ROOT = Path(os.path.abspath(SPECPATH))
 
 datas = [
     (str(ROOT / "fastclipper" / "web" / "studio.html"), "fastclipper/web"),
+    (str(ROOT / "fastclipper" / "web" / "aprovacao.html"), "fastclipper/web"),
     (str(ROOT / "face_detector.tflite"), "."),
     (
         str(ROOT / "fastclipper" / "assets" / "models" / "face_detection_yunet_2023mar.onnx"),
