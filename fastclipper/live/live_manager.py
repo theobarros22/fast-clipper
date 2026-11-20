@@ -24,6 +24,13 @@ from typing import Any, Callable, Dict, List, Optional
 from fastclipper.ingest.buffer import SegmentedBuffer
 from fastclipper.ingest.clock import VirtualClock
 from fastclipper.ingest.marker import CandidateStatus, ManualMarker
+from fastclipper.live.screen_capture import (
+    ScreenSpec,
+    build_capture_command,
+    is_screen_url,
+    parse_screen_url,
+    resolve_backend,
+)
 from fastclipper.live.youtube_live import SecuritySSRFError, YouTubeLiveIngestor
 
 logger = logging.getLogger(__name__)
@@ -161,9 +168,17 @@ class LiveClipSession:
         self.segments_dir.mkdir(parents=True, exist_ok=True)
         self.windows_dir.mkdir(parents=True, exist_ok=True)
 
-        # Valida SSRF e plataforma antes de qualquer operação de rede
-        YouTubeLiveIngestor(stream_url=url, buffer_dir=self.segments_dir)
-        self.platform = YouTubeLiveIngestor.detect_platform(url)
+        self.source_type = "screen" if is_screen_url(url) else "url"
+        self.screen_spec: Optional[ScreenSpec] = None
+        self.screen_backend: Optional[str] = None
+        if self.source_type == "screen":
+            # Captura local da tela: sem rede, logo sem SSRF. A pseudo-URL é validada pelo parser.
+            self.screen_spec = parse_screen_url(url)
+            self.platform = "screen"
+        else:
+            # Valida SSRF e plataforma antes de qualquer operação de rede
+            YouTubeLiveIngestor(stream_url=url, buffer_dir=self.segments_dir)
+            self.platform = YouTubeLiveIngestor.detect_platform(url)
 
         self.pipeline_runner = pipeline_runner
         self.segment_duration_s = max(2.0, float(segment_duration_s))
@@ -248,8 +263,62 @@ class LiveClipSession:
             args.extend(["-map", "0:v:0", "-map", "1:a:0"])
         return args
 
+    def _start_screen(self) -> None:
+        """Grava a tela (e áudio opcional) em segmentos, com falha rápida se o FFmpeg não conseguir capturar."""
+        spec = self.screen_spec
+        if spec is None:
+            raise RuntimeError("Captura de tela sem configuração.")
+        backend = resolve_backend(spec, self.ffmpeg_bin)
+        self.screen_backend = backend
+        self.resolved_url = self.url
+        cmd = build_capture_command(
+            spec,
+            self.ffmpeg_bin,
+            str(self.segments_dir / "seg_%05d.ts"),
+            self.segment_duration_s,
+            backend=backend,
+        )
+
+        self._stop_event.clear()
+        self.last_error = None
+        self._ffmpeg_log_file = open(self._ffmpeg_log_path, "w", encoding="utf-8", errors="replace")
+        self._proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=self._ffmpeg_log_file,
+            text=True,
+        )
+        # Janela inexistente, dispositivo de áudio ocupado ou backend indisponível fazem o FFmpeg sair em segundos.
+        self._stop_event.wait(1.5)
+        if self._proc.poll() is not None:
+            try:
+                self._ffmpeg_log_file.flush()
+                tail = self._ffmpeg_log_path.read_text(encoding="utf-8", errors="replace")[-600:].strip()
+            except Exception:
+                tail = ""
+            try:
+                self._ffmpeg_log_file.close()
+            except Exception:
+                pass
+            self._ffmpeg_log_file = None
+            raise RuntimeError(
+                f"Não foi possível iniciar a captura de tela ({backend}). "
+                f"{tail or 'Verifique o alvo (janela/tela) e o dispositivo de áudio.'}"
+            )
+        self.running = True
+        self.started_at = time.time()
+        self._monitor_thread = threading.Thread(
+            target=self._monitor_loop,
+            daemon=True,
+            name=f"LiveMonitor-{self.session_id}",
+        )
+        self._monitor_thread.start()
+
     def start(self) -> None:
         """Resolve o stream e inicia captura contínua em segmentos via FFmpeg."""
+        if self.source_type == "screen":
+            self._start_screen()
+            return
         resolved_url = self.stream_resolver(self.url)
         self.resolved_url = resolved_url
         cmd = [
@@ -291,6 +360,8 @@ class LiveClipSession:
 
     def iter_preview_fmp4(self, chunk_size: int = 16384):
         """Gera fluxo MP4 fragmentado (fMP4) ao vivo para o monitor <video> no navegador."""
+        if self.source_type == "screen":
+            return  # sem monitor para captura de tela: evitaria o efeito espelho (tela dentro da tela)
         target_url = self.resolved_url or self.stream_resolver(self.url)
         self._terminate_preview_proc()
 
@@ -942,6 +1013,17 @@ class LiveClipSession:
             "session_id": self.session_id,
             "url": self.url,
             "platform": self.platform,
+            "source_type": self.source_type,
+            "screen": (
+                {
+                    "target": self.screen_spec.target,
+                    "fps": self.screen_spec.fps,
+                    "audio_device": self.screen_spec.audio_device,
+                    "backend": self.screen_backend,
+                }
+                if self.screen_spec
+                else None
+            ),
             "running": self.running,
             "elapsed_s": round(now_wall - self.started_at, 1) if self.started_at else 0.0,
             "segments_count": len(self.buffer),

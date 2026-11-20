@@ -506,8 +506,46 @@
                 <details class="details-box" id="live-clipper-box" open>
                     <summary>Central de Clipping Ao Vivo (YouTube / X / Twitch / Kick)</summary>
                     <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;" role="radiogroup" aria-label="Fonte do clipping ao vivo">
+                            <label class="checkbox-row" style="margin:0;">
+                                <input type="radio" name="live_source" id="live_source_url" value="url" checked> Link de live
+                            </label>
+                            <label class="checkbox-row" style="margin:0;">
+                                <input type="radio" name="live_source" id="live_source_screen" value="screen"> Gravar tela
+                            </label>
+                        </div>
+
+                        <div id="screen-options" style="display:none; flex-direction:column; gap:8px;">
+                            <div class="row-2">
+                                <div>
+                                    <label class="label" for="screen_target">O que gravar</label>
+                                    <select id="screen_target" class="select-box">
+                                        <option value="desktop" selected>Tela inteira</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="label" for="screen_audio">Áudio</label>
+                                    <select id="screen_audio" class="select-box">
+                                        <option value="" selected>Sem áudio (trilha silenciosa)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <label class="label" for="screen_fps" style="margin:0;">FPS</label>
+                                <select id="screen_fps" class="select-box" style="width:auto; padding:6px 8px; font-size:12px;">
+                                    <option value="24">24</option>
+                                    <option value="30" selected>30</option>
+                                    <option value="60">60</option>
+                                </select>
+                                <button type="button" id="btn-screen-refresh" class="chip">Atualizar janelas e áudio</button>
+                            </div>
+                            <div id="screen-hint" style="font-size:11.5px; color:var(--muted);">
+                                O áudio do jogo/sistema só aparece se a "Mixagem estéreo" (ou um capturador virtual) estiver habilitada no Windows. Jogos em tela cheia exclusiva podem sair pretos: use o modo janela sem bordas. Sem monitor embutido para não gerar o efeito espelho.
+                            </div>
+                        </div>
+
                         <div class="row-2">
-                            <div>
+                            <div id="live-url-wrap">
                                 <label class="label" for="live_url">URL da live (YouTube, X, Twitch ou Kick)</label>
                                 <input type="text" id="live_url" class="input-text" placeholder="https://www.youtube.com/watch?v=... ou https://x.com/... ou https://twitch.tv/...">
                             </div>
@@ -541,7 +579,7 @@
                         <div id="live-monitor-wrap" class="live-monitor-box" style="display:none;">
                             <div class="live-monitor-header">
                                 <div style="display:flex; align-items:center; gap:8px;">
-                                    <span class="live-badge"><span class="dot-live"></span>AO VIVO</span>
+                                    <span class="live-badge"><span class="dot-live"></span><span id="live-badge-text">AO VIVO</span></span>
                                     <span id="live-monitor-meta" style="font-size:12px; color:var(--sub);">Conectando ao stream...</span>
                                 </div>
                                 <span id="live-transcript-ticker" style="font-size:11.5px; color:var(--muted); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
@@ -1299,6 +1337,9 @@ http://127.0.0.1:8000/docs</div>
             const player = document.getElementById('live-monitor-player');
             if (!wrap || !player) return;
             wrap.style.display = 'block';
+            player.style.display = 'block';
+            const badgeTxt = document.getElementById('live-badge-text');
+            if (badgeTxt) badgeTxt.textContent = 'AO VIVO';
             if (!forceReload && liveMonitorSessionId === sessionId && player.getAttribute('src')) {
                 return;
             }
@@ -1310,6 +1351,71 @@ http://127.0.0.1:8000/docs</div>
                 player.muted = true;
                 player.play().catch(() => {});
             });
+        }
+
+        function getLiveSource() {
+            const el = document.querySelector('input[name="live_source"]:checked');
+            return el ? el.value : 'url';
+        }
+
+        function applyLiveSourceUI() {
+            const isScreen = getLiveSource() === 'screen';
+            const opts = document.getElementById('screen-options');
+            const urlWrap = document.getElementById('live-url-wrap');
+            if (opts) opts.style.display = isScreen ? 'flex' : 'none';
+            if (urlWrap) urlWrap.style.display = isScreen ? 'none' : '';
+            if (isScreen) loadScreenSources();
+        }
+
+        function fillSelect(sel, firstOption, items) {
+            while (sel.options.length > 1) sel.remove(1);
+            sel.options[0].value = firstOption.value;
+            sel.options[0].textContent = firstOption.label;
+            items.forEach((name) => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name.length > 80 ? name.slice(0, 77) + '...' : name;
+                sel.appendChild(opt);
+            });
+        }
+
+        async function loadScreenSources() {
+            const hint = document.getElementById('screen-hint');
+            try {
+                const info = await api('/api/v1/studio/screen/sources');
+                const targetSel = document.getElementById('screen_target');
+                const audioSel = document.getElementById('screen_audio');
+                const prevTarget = targetSel.value;
+                const prevAudio = audioSel.value;
+                fillSelect(targetSel, { value: 'desktop', label: 'Tela inteira' }, info.windows || []);
+                fillSelect(audioSel, { value: '', label: 'Sem áudio (trilha silenciosa)' }, info.audio_devices || []);
+                if ([...targetSel.options].some((o) => o.value === prevTarget)) targetSel.value = prevTarget;
+                if ([...audioSel.options].some((o) => o.value === prevAudio)) audioSel.value = prevAudio;
+                if (!info.supported && hint) {
+                    hint.textContent = 'Captura de tela não é suportada nesta plataforma (apenas Windows e Linux/X11).';
+                }
+            } catch (err) {
+                setStatus(`Não foi possível listar janelas e áudio: ${err.message}`, 'err');
+            }
+        }
+
+        function showScreenRecordingPanel(st) {
+            const wrap = document.getElementById('live-monitor-wrap');
+            const player = document.getElementById('live-monitor-player');
+            const badgeTxt = document.getElementById('live-badge-text');
+            const metaEl = document.getElementById('live-monitor-meta');
+            if (wrap) wrap.style.display = 'block';
+            if (player) {
+                try { player.pause(); } catch (_) {}
+                player.removeAttribute('src');
+                player.style.display = 'none';
+            }
+            if (badgeTxt) badgeTxt.textContent = 'GRAVANDO TELA';
+            const scr = st.screen || {};
+            const alvo = scr.target && scr.target !== 'desktop' ? `janela "${scr.target}"` : 'tela inteira';
+            if (metaEl) {
+                metaEl.textContent = `${alvo} · ${scr.fps || 30} fps · ${scr.backend || 'auto'} · Buffer: ${fmtClock(st.buffer_duration_s || 0)} (${st.segments_count || 0} segs)`;
+            }
         }
 
         function stopLiveMonitor() {
@@ -1511,7 +1617,7 @@ http://127.0.0.1:8000/docs</div>
             const tickerEl = document.getElementById('live-transcript-ticker');
 
             if (running) {
-                const platMap = { x: 'X', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' };
+                const platMap = { x: 'X', twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', screen: 'Tela' };
                 const plat = platMap[st.platform] || 'YouTube';
                 const activeLen = (st.active_cuts && st.active_cuts.length) || 0;
                 const activeTxt = activeLen > 0 ? ` · ${activeLen} cortando agora` : '';
@@ -1522,7 +1628,11 @@ http://127.0.0.1:8000/docs</div>
                 if (tickerEl) {
                     tickerEl.textContent = st.last_transcript_snippet ? `Última fala: "${st.last_transcript_snippet}"` : '';
                 }
-                connectLiveMonitor(st.session_id || 'live', false);
+                if (st.source_type === 'screen') {
+                    showScreenRecordingPanel(st);
+                } else {
+                    connectLiveMonitor(st.session_id || 'live', false);
+                }
                 if (!livePollTimer) {
                     livePollTimer = setInterval(pollLiveStatus, 2000);
                 }
@@ -1670,12 +1780,21 @@ http://127.0.0.1:8000/docs</div>
         }
 
         async function startLiveCapture() {
+            const isScreen = getLiveSource() === 'screen';
             const url = document.getElementById('live_url').value.trim();
-            if (!url) {
+            if (!isScreen && !url) {
                 setStatus('Informe a URL da live no YouTube, X, Twitch ou Kick.', 'err');
                 return;
             }
-            setStatus('Conectando à transmissão ao vivo...', 'busy');
+            const sourceFields = isScreen
+                ? {
+                    source_type: 'screen',
+                    screen_target: document.getElementById('screen_target').value || 'desktop',
+                    screen_audio_device: document.getElementById('screen_audio').value || null,
+                    screen_fps: parseInt(document.getElementById('screen_fps').value, 10) || 30,
+                }
+                : { url };
+            setStatus(isScreen ? 'Iniciando a gravação da tela...' : 'Conectando à transmissão ao vivo...', 'busy');
             try {
                 const opts = currentLiveRenderOpts();
                 const kwRaw = (document.getElementById('live_keywords').value || '').trim();
@@ -1684,7 +1803,7 @@ http://127.0.0.1:8000/docs</div>
                 const st = await api('/api/v1/studio/live/start', {
                     method: 'POST',
                     body: JSON.stringify({
-                        url,
+                        ...sourceFields,
                         segment_duration_s: 6.0,
                         auto_clip: document.getElementById('live_autoclip').checked,
                         auto_clip_mode: document.getElementById('live_autoclip_mode').value,
@@ -1699,7 +1818,12 @@ http://127.0.0.1:8000/docs</div>
                 updateLiveUI(st);
                 if (livePollTimer) clearInterval(livePollTimer);
                 livePollTimer = setInterval(pollLiveStatus, 2000);
-                setStatus('Live conectada! Assistindo no monitor acima — aperte M para clipar a qualquer instante.', 'idle');
+                setStatus(
+                    isScreen
+                        ? 'Gravando a tela! Aperte M para clipar os últimos segundos a qualquer instante.'
+                        : 'Live conectada! Assistindo no monitor acima — aperte M para clipar a qualquer instante.',
+                    'idle'
+                );
             } catch (err) {
                 setStatus(`Falha ao iniciar live: ${err.message}`, 'err');
             }
@@ -2588,6 +2712,9 @@ http://127.0.0.1:8000/docs</div>
             });
 
             document.getElementById('btn-live-start').addEventListener('click', startLiveCapture);
+            document.querySelectorAll('input[name="live_source"]').forEach((r) => r.addEventListener('change', applyLiveSourceUI));
+            document.getElementById('btn-screen-refresh').addEventListener('click', loadScreenSources);
+            applyLiveSourceUI();
             document.getElementById('btn-live-stop').addEventListener('click', stopLiveCapture);
             document.getElementById('btn-live-toggle-monitor').addEventListener('click', () => {
                 connectLiveMonitor(liveMonitorSessionId || 'active', true);

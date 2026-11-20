@@ -32,6 +32,7 @@ from fastclipper.export import PackageExporter, generate_post_copy
 from fastclipper.ingest.precheck import MediaPrechecker
 from fastclipper.ingest.vod_ingest import VodIngestor
 from fastclipper.live.live_manager import LiveManager
+from fastclipper.live.screen_capture import ScreenSpec, build_screen_url, list_screen_sources
 from fastclipper.live.youtube_live import SecuritySSRFError
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangle
 from fastclipper.layouts.engine import LayoutEngine
@@ -292,7 +293,13 @@ class DownloadSourceRequest(BaseModel):
 
 
 class LiveStartRequest(BaseModel):
-    url: str
+    url: str = ""
+    source_type: Literal["url", "screen"] = "url"
+    screen_target: str = Field("desktop", max_length=200)
+    screen_fps: int = Field(30, ge=10, le=60)
+    screen_audio_device: Optional[str] = Field(None, max_length=200)
+    screen_backend: Literal["auto", "gdigrab", "ddagrab"] = "auto"
+    screen_draw_mouse: bool = True
     segment_duration_s: float = 10.0
     retention_seconds: float = 1800.0
     auto_clip: bool = False
@@ -325,6 +332,12 @@ class LiveStartRequest(BaseModel):
     @classmethod
     def _val_preset(cls, v: str) -> str:
         return _check_subtitle_preset(v)
+
+    @model_validator(mode="after")
+    def _val_source(self) -> "LiveStartRequest":
+        if self.source_type == "url" and not self.url.strip():
+            raise ValueError("Informe a URL da live (YouTube, X, Twitch ou Kick).")
+        return self
 
 
 class LiveMarkRequest(BaseModel):
@@ -1301,8 +1314,20 @@ def studio_live_start(req: LiveStartRequest):
             "normalize_audio": req.normalize_audio,
             "watermark_text": req.watermark_text,
         }
+        if req.source_type == "screen":
+            source_url = build_screen_url(
+                ScreenSpec(
+                    target=req.screen_target,
+                    fps=req.screen_fps,
+                    audio_device=req.screen_audio_device,
+                    backend=req.screen_backend,
+                    draw_mouse=req.screen_draw_mouse,
+                )
+            )
+        else:
+            source_url = req.url
         session = live_manager.start_session(
-            url=req.url,
+            url=source_url,
             segment_duration_s=req.segment_duration_s,
             retention_seconds=req.retention_seconds,
             auto_clip=req.auto_clip,
@@ -1319,6 +1344,12 @@ def studio_live_start(req: LiveStartRequest):
         raise HTTPException(status_code=400, detail=f"Falha ao iniciar live: {exc}")
 
 
+@app.get("/api/v1/studio/screen/sources", tags=["Studio Live"])
+def studio_screen_sources():
+    """Lista backends de captura, janelas abertas e dispositivos de áudio disponíveis para gravar a tela."""
+    return list_screen_sources()
+
+
 @app.get("/api/v1/studio/live/status", tags=["Studio Live"])
 def studio_live_status():
     """Retorna o estado atual da transmissão ao vivo, fila ativa e clipes gerados."""
@@ -1331,6 +1362,8 @@ def studio_live_monitor_stream():
     session = live_manager.current_session
     if not session or not session.running:
         raise HTTPException(status_code=404, detail="Nenhuma transmissão ao vivo ativa no momento.")
+    if session.source_type == "screen":
+        raise HTTPException(status_code=409, detail="Monitor desativado na captura de tela (evita o efeito espelho).")
     return StreamingResponse(
         session.iter_preview_fmp4(),
         media_type="video/mp4",
