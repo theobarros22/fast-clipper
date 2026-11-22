@@ -388,27 +388,6 @@ class PipelineRunner:
             },
         )
 
-    def _fail_job(
-        self,
-        job_id: str,
-        worker_id: str,
-        error_message: str,
-        retryable: bool = True,
-    ) -> Any:
-        try:
-            return self.queue.fail_job(
-                job_id=job_id,
-                worker_id=worker_id,
-                error_message=error_message,
-                retryable=retryable,
-            )
-        except TypeError:
-            return self.queue.fail_job(
-                job_id=job_id,
-                worker_id=worker_id,
-                error_message=error_message,
-            )
-
     def process_job(
         self,
         job: QueueJob,
@@ -445,7 +424,7 @@ class PipelineRunner:
                     is_oom = is_out_of_memory_error(err_msg)
                     if is_oom and not err_msg.startswith("Sem memória:"):
                         err_msg = f"Sem memória: {err_msg}"
-                    self._fail_job(
+                    self.queue.fail_job(
                         job_id=job.job_id,
                         worker_id=self.worker_id,
                         error_message=err_msg,
@@ -467,13 +446,13 @@ class PipelineRunner:
 
             else:
                 msg = f"Tipo de trabalho não suportado: {job.job_type}"
-                self._fail_job(job.job_id, self.worker_id, msg)
+                self.queue.fail_job(job_id=job.job_id, worker_id=self.worker_id, error_message=msg)
                 return JobExecutionResult(job_id=job.job_id, success=False, error=msg)
 
         except InsufficientMemoryError as exc:
             msg = f"Sem memória: {exc}"
             logger.warning("Job %s falhou por falta de memória: %s", job.job_id, msg)
-            self._fail_job(
+            self.queue.fail_job(
                 job_id=job.job_id,
                 worker_id=self.worker_id,
                 error_message=msg,
@@ -486,7 +465,7 @@ class PipelineRunner:
             is_oom = is_out_of_memory_error(msg)
             if is_oom and not msg.startswith("Sem memória:"):
                 msg = f"Sem memória: {msg}"
-            self._fail_job(
+            self.queue.fail_job(
                 job_id=job.job_id,
                 worker_id=self.worker_id,
                 error_message=msg,
@@ -739,7 +718,12 @@ class PipelineRunner:
             is_oom = is_out_of_memory_error(err_msg)
             if is_oom and not err_msg.startswith("Sem memória:"):
                 err_msg = f"Sem memória: {err_msg}"
-            self._fail_job(job.job_id, self.worker_id, err_msg, retryable=not is_oom)
+            self.queue.fail_job(
+                job_id=job.job_id,
+                worker_id=self.worker_id,
+                error_message=err_msg,
+                retryable=not is_oom,
+            )
             return JobExecutionResult(
                 job_id=job.job_id,
                 success=False,
