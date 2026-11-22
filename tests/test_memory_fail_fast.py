@@ -35,6 +35,7 @@ from fastclipper.process.memory_guard import (
 )
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.pipeline_runner import JobExecutionResult, PipelineRunner
+from fastclipper.storage.sqlite_store import SQLiteStore, SQLiteTaskQueue
 from fastclipper.transcribe.whisper_service import WhisperTranscriptionService
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +140,35 @@ def test_durable_queue_fail_job_retryable_behavior():
     assert job.status == JobStatus.FALHOU
     assert job.attempts == 2
     assert "Falha não recuperável" in job.step_description
+
+
+def test_sqlite_task_queue_fail_job_retryable_behavior(tmp_path):
+    """Valida o parâmetro retryable na SQLiteTaskQueue real com persistência SQLite."""
+    store = SQLiteStore(tmp_path / "queue_test.db")
+    queue = SQLiteTaskQueue(store)
+
+    job = queue.enqueue("org_test", "render_clip", {"video_path": "x.mp4"}, max_attempts=3)
+    leased = queue.lease_job(job.job_id, "worker_sql")
+    assert leased is not None
+    assert leased.attempts == 1
+
+    # Falha comum com retryable=True deve voltar para CRIADO
+    failed_retry = queue.fail_job(job.job_id, "worker_sql", "Invalid argument", retryable=True)
+    assert failed_retry.status == JobStatus.CRIADO
+    assert failed_retry.attempts == 1
+
+    # Lease da tentativa 2
+    leased2 = queue.lease_job(job.job_id, "worker_sql")
+    assert leased2 is not None
+    assert leased2.attempts == 2
+
+    # Falha de memória com retryable=False deve ir direto para FALHOU
+    failed_oom = queue.fail_job(
+        job.job_id, "worker_sql", "Sem memória: Cannot allocate memory", retryable=False
+    )
+    assert failed_oom.status == JobStatus.FALHOU
+    assert failed_oom.attempts == 2
+    assert "Falha não recuperável" in failed_oom.step_description
 
 
 # ---------------------------------------------------------------------------

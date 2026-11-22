@@ -573,7 +573,13 @@ class SQLiteTaskQueue:
             updated = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
             return self._row_to_job(updated)
 
-    def fail_job(self, job_id: str, worker_id: str, error_message: str) -> QueueJob:
+    def fail_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        error_message: str,
+        retryable: bool = True,
+    ) -> QueueJob:
         now = time.time()
         with self._lock, self.store.connect() as conn:
             row = conn.execute("SELECT worker_id, attempts, max_attempts FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
@@ -582,12 +588,15 @@ class SQLiteTaskQueue:
 
             attempts = int(row["attempts"])
             max_attempts = int(row["max_attempts"])
-            if attempts < max_attempts:
+            if retryable and attempts < max_attempts:
                 new_status = JobStatus.CRIADO.value
                 desc = f"Tentativa {attempts} falhou: {error_message}. Aguardando retry."
             else:
                 new_status = JobStatus.FALHOU.value
-                desc = f"Falha definitiva após {attempts} tentativas: {error_message}"
+                if not retryable:
+                    desc = f"Falha não recuperável: {error_message}"
+                else:
+                    desc = f"Falha definitiva após {attempts} tentativas: {error_message}"
 
             conn.execute(
                 """
