@@ -177,6 +177,7 @@ class DurableTaskQueue:
         job_id: str,
         worker_id: str,
         error_message: str,
+        retryable: bool = True,
     ) -> QueueJob:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -187,12 +188,15 @@ class DurableTaskQueue:
             job.leased_until = None
             job.updated_at = time.time()
 
-            if job.attempts < job.max_attempts:
+            if retryable and job.attempts < job.max_attempts:
                 job.status = JobStatus.CRIADO  # Recoloca para nova tentativa
                 job.step_description = f"Tentativa {job.attempts} falhou: {error_message}. Aguardando retry."
             else:
                 job.status = JobStatus.FALHOU
-                job.step_description = f"Falha definitiva após {job.attempts} tentativas: {error_message}"
+                if not retryable:
+                    job.step_description = f"Falha não recuperável: {error_message}"
+                else:
+                    job.step_description = f"Falha definitiva após {job.attempts} tentativas: {error_message}"
             return job
 
     def get_job(self, job_id: str) -> Optional[QueueJob]:

@@ -29,6 +29,12 @@ from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangl
 from fastclipper.layouts.engine import LayoutEngine
 from fastclipper.multicreator.models import ComparisonMode, CreatorReactionTrack, CrossCreatorEvent
 from fastclipper.multicreator.renderer import ComparisonRenderer
+from fastclipper.process.memory_guard import (
+    MINIMOS_GB,
+    InsufficientMemoryError,
+    ensure_free_memory,
+    is_out_of_memory_error,
+)
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus, QueueJob
 from fastclipper.rendering.adapter import IsolatedRenderAdapter, RenderResult
 from fastclipper.rendering.encoder import HardwareEncoderManager, SOFTWARE_ENCODER
@@ -303,6 +309,13 @@ class PipelineRunner:
             ass_path.write_text(ass_content, encoding="utf-8")
 
         # 4. Renderização e Queima de Legenda / Tarja / Retenção
+        try:
+            ensure_free_memory(MINIMOS_GB["render"], "render")
+        except InsufficientMemoryError:
+            if ass_path is not None:
+                ass_path.unlink(missing_ok=True)
+            raise
+
         burn_subtitles = bool(ass_path and (hook_title or (burn_subs_requested and bool(cues))))
         suffix = "_16x9.mp4" if is_16x9 else "_9x16.mp4"
         output_filename = params.get("output_filename") or f"{job_id}{suffix}"
@@ -375,6 +388,27 @@ class PipelineRunner:
             },
         )
 
+    def _fail_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        error_message: str,
+        retryable: bool = True,
+    ) -> Any:
+        try:
+            return self.queue.fail_job(
+                job_id=job_id,
+                worker_id=worker_id,
+                error_message=error_message,
+                retryable=retryable,
+            )
+        except TypeError:
+            return self.queue.fail_job(
+                job_id=job_id,
+                worker_id=worker_id,
+                error_message=error_message,
+            )
+
     def process_job(
         self,
         job: QueueJob,
@@ -407,12 +441,17 @@ class PipelineRunner:
                     )
                     logger.info("Job %s concluído com sucesso em %s", job.job_id, result.output_video_path)
                 else:
-                    self.queue.fail_job(
+                    err_msg = result.error or "Erro desconhecido na renderização"
+                    is_oom = is_out_of_memory_error(err_msg)
+                    if is_oom and not err_msg.startswith("Sem memória:"):
+                        err_msg = f"Sem memória: {err_msg}"
+                    self._fail_job(
                         job_id=job.job_id,
                         worker_id=self.worker_id,
-                        error_message=result.error or "Erro desconhecido na renderização",
+                        error_message=err_msg,
+                        retryable=not is_oom,
                     )
-                    logger.warning("Job %s falhou: %s", job.job_id, result.error)
+                    logger.warning("Job %s falhou: %s", job.job_id, err_msg)
 
                 return result
 
@@ -428,13 +467,32 @@ class PipelineRunner:
 
             else:
                 msg = f"Tipo de trabalho não suportado: {job.job_type}"
-                self.queue.fail_job(job.job_id, self.worker_id, msg)
+                self._fail_job(job.job_id, self.worker_id, msg)
                 return JobExecutionResult(job_id=job.job_id, success=False, error=msg)
 
+        except InsufficientMemoryError as exc:
+            msg = f"Sem memória: {exc}"
+            logger.warning("Job %s falhou por falta de memória: %s", job.job_id, msg)
+            self._fail_job(
+                job_id=job.job_id,
+                worker_id=self.worker_id,
+                error_message=msg,
+                retryable=False,
+            )
+            return JobExecutionResult(job_id=job.job_id, success=False, error=msg)
         except Exception as e:
             logger.exception("Exceção não tratada durante o processamento do job %s", job.job_id)
-            self.queue.fail_job(job.job_id, self.worker_id, str(e))
-            return JobExecutionResult(job_id=job.job_id, success=False, error=str(e))
+            msg = str(e)
+            is_oom = is_out_of_memory_error(msg)
+            if is_oom and not msg.startswith("Sem memória:"):
+                msg = f"Sem memória: {msg}"
+            self._fail_job(
+                job_id=job.job_id,
+                worker_id=self.worker_id,
+                error_message=msg,
+                retryable=not is_oom,
+            )
+            return JobExecutionResult(job_id=job.job_id, success=False, error=msg)
 
     def run_single_step(self, job_types: Optional[List[str]] = None) -> Optional[JobExecutionResult]:
         """Tenta assumir e processar um único trabalho da fila."""
@@ -654,6 +712,7 @@ class PipelineRunner:
             tracks=tracks,
         )
 
+        ensure_free_memory(MINIMOS_GB["render"], "render")
         res = self.comparison_renderer.render_event_comparison(
             event=event,
             mode=mode,
@@ -677,7 +736,10 @@ class PipelineRunner:
             )
         else:
             err_msg = str(res.get("errors") or res.get("error") or "Falha na comparação")
-            self.queue.fail_job(job.job_id, self.worker_id, err_msg)
+            is_oom = is_out_of_memory_error(err_msg)
+            if is_oom and not err_msg.startswith("Sem memória:"):
+                err_msg = f"Sem memória: {err_msg}"
+            self._fail_job(job.job_id, self.worker_id, err_msg, retryable=not is_oom)
             return JobExecutionResult(
                 job_id=job.job_id,
                 success=False,

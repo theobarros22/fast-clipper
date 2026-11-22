@@ -37,6 +37,7 @@ from fastclipper.live.youtube_live import SecuritySSRFError
 from fastclipper.layouts.config import ChannelLayoutConfig, LayoutMode, Rectangle
 from fastclipper.layouts.engine import LayoutEngine
 from fastclipper.layouts.facecam_detector import FacecamDetector, FacePriorityStore
+from fastclipper.process.memory_guard import InsufficientMemoryError, is_out_of_memory_error
 from fastclipper.queue.durable_queue import DurableTaskQueue, JobStatus
 from fastclipper.rendering.encoder import HardwareEncoderManager
 from fastclipper.rendering.pipeline_runner import PipelineRunner
@@ -98,6 +99,11 @@ app = FastAPI(
     version="2.0.0",
     description="Plataforma local de monitoramento, clipping 9:16 e revisão editorial.",
 )
+
+
+@app.exception_handler(InsufficientMemoryError)
+def insufficient_memory_exception_handler(request: Request, exc: InsufficientMemoryError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 from fastclipper.autopilot.routes import router as autopilot_router  # Piloto Automático
@@ -935,9 +941,13 @@ def studio_transcribe_source(req: TranscribeRequest):
             model_name=req.model_name,
             force_retranscribe=req.force_retranscribe,
         )
+    except InsufficientMemoryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
+        if is_out_of_memory_error(str(exc)):
+            raise HTTPException(status_code=503, detail=str(exc))
         raise HTTPException(status_code=400, detail=f"Erro na transcrição: {exc}")
 
 
@@ -1689,11 +1699,16 @@ def render_studio_clip_immediate(req: StudioRenderRequest):
 
     try:
         result = pipeline_runner.render_clip(params, cancel_event=job_cancel)
+    except InsufficientMemoryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     finally:
         with _active_cancel_lock:
             _active_cancel_events.discard(job_cancel)
     if not result.success:
-        raise HTTPException(status_code=400, detail=result.error or "Falha na renderização do clipe")
+        err = result.error or "Falha na renderização do clipe"
+        if is_out_of_memory_error(err):
+            raise HTTPException(status_code=503, detail=err)
+        raise HTTPException(status_code=400, detail=err)
 
     filename = Path(result.output_video_path).name if result.output_video_path else None
     extra_outputs = [

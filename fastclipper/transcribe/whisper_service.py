@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from fastclipper.ingest.vod_ingest import compute_file_sha256
+from fastclipper.process.memory_guard import MINIMOS_GB, ensure_free_memory
 from fastclipper.storage.sqlite_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,8 @@ class WhisperTranscriptionService:
                     progress_callback(100.0, "Transcrição carregada do cache SQLite")
                 cached["from_cache"] = True
                 return cached
+
+        ensure_free_memory(MINIMOS_GB["transcricao"], "transcricao")
         device, compute_type = self.select_device_and_compute()
 
         if progress_callback:

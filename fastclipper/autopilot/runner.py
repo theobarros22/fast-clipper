@@ -24,6 +24,7 @@ from fastclipper.autopilot.discovery import (
 )
 from fastclipper.autopilot.state import AutopilotState
 from fastclipper.autopilot.studio_client import StudioClient, StudioError
+from fastclipper.process.memory_guard import is_out_of_memory_error
 
 logger = logging.getLogger("fastclipper.autopilot")
 
@@ -222,18 +223,48 @@ class AutopilotRunner:
     def _wait_jobs(self, job_ids: List[str]) -> List[Optional[Dict[str, Any]]]:
         deadline = time.time() + self.render_timeout_s
         results: Dict[str, Optional[Dict[str, Any]]] = {j: None for j in job_ids}
+        last_states: Dict[str, tuple[Optional[str], Optional[str]]] = {j: (None, None) for j in job_ids}
+        finished_jobs: set[str] = set()
+
         while time.time() < deadline:
             pending = False
             for jid in job_ids:
-                if results[jid] and results[jid]["status"] in DONE_STATUSES | FAIL_STATUSES:
+                if jid in finished_jobs:
                     continue
+
                 try:
-                    results[jid] = self.client.get(f"/api/v1/queue/jobs/{jid}")
+                    job_data = self.client.get(f"/api/v1/queue/jobs/{jid}")
+                    results[jid] = job_data
                 except StudioError:
-                    results[jid] = None
-                st = (results[jid] or {}).get("status")
-                if st not in DONE_STATUSES | FAIL_STATUSES:
+                    job_data = results[jid]
+
+                if not job_data:
                     pending = True
+                    continue
+
+                st = job_data.get("status")
+                step_desc = job_data.get("step_description")
+                err = str(job_data.get("error") or "")
+                desc = str(step_desc or "")
+
+                state_key = (st, step_desc)
+                if state_key != last_states[jid]:
+                    last_states[jid] = state_key
+                    logger.info("Job %s: status=%s (%s)", jid, st, step_desc)
+
+                # Falha com 'Sem memória' encerra a espera daquele job na hora
+                failed_sem_memoria = (
+                    "sem memória" in err.lower()
+                    or "sem memória" in desc.lower()
+                    or is_out_of_memory_error(err)
+                    or is_out_of_memory_error(desc)
+                )
+
+                if st in DONE_STATUSES or st in FAIL_STATUSES or failed_sem_memoria:
+                    finished_jobs.add(jid)
+                else:
+                    pending = True
+
             if not pending:
                 break
             time.sleep(self.poll_interval_s)
