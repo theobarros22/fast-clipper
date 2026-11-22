@@ -6,21 +6,28 @@
     <title>Fast Clipper — Studio Local 9:16</title>
     <style>
         :root {
-            --bg: #111317;
-            --card: #181B20;
-            --raised: #20242B;
-            --ink: #EEF1F5;
-            --sub: #B5BDCA;
-            --muted: #9AA3B2;
-            --line: #2C323C;
-            --accent: #3B82F6;
-            --accent-hover: #2563EB;
-            --accent-soft: rgba(59, 130, 246, 0.16);
-            --ok: #22C55E;
-            --ok-soft: rgba(34, 197, 94, 0.14);
-            --warn: #F59E0B;
-            --error: #EF4444;
-            --error-soft: rgba(239, 68, 68, 0.14);
+            --bg: #0F0A1E;
+            --card: #18112D;
+            --raised: #22183D;
+            --line: #3A2A5E;
+            --ink: #FBF4FF;
+            --sub: #D2C4EC;
+            --muted: #A495C6;
+            --accent: #FF4FA3;
+            --accent-hover: #FF2E8C;
+            --accent-soft: rgba(255, 79, 163, 0.16);
+            --accent-ink: #1B0714;
+            --sunset: #FF8A3D;
+            --violet: #9B5CFF;
+            --violet-text: #B98CFF;
+            --teal: #2EE6D6;
+            --ok: #3DDC97;
+            --ok-soft: rgba(61, 220, 151, 0.16);
+            --warn: #FFB547;
+            --warn-soft: rgba(255, 181, 71, 0.16);
+            --error: #FF5D6C;
+            --error-soft: rgba(255, 93, 108, 0.16);
+            --grad-vice: linear-gradient(90deg, #FF8A3D 0%, #FF4FA3 50%, #9B5CFF 100%);
             --radius-sm: 6px;
             --radius-md: 10px;
             --radius-lg: 12px;
@@ -33,9 +40,31 @@
             line-height: 1.5;
             padding: 18px 24px 64px 24px;
         }
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--grad-vice);
+            z-index: 1000;
+        }
         :focus-visible {
-            outline: 2px solid var(--accent);
+            outline: 2px solid var(--teal);
             outline-offset: 2px;
+        }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+            outline: 2px solid var(--teal);
+            outline-offset: 2px;
+        }
+        a {
+            color: var(--teal);
+            text-decoration: none;
+        }
+        a:hover {
+            color: var(--accent);
+            text-decoration: underline;
         }
         .header {
             display: flex;
@@ -55,7 +84,13 @@
             align-items: center;
             gap: 8px;
         }
-        .brand .accent { color: #60A5FA; }
+        .brand .accent {
+            background: var(--grad-vice);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+            font-weight: 800;
+        }
         .tag-studio {
             background: var(--raised);
             color: var(--sub);
@@ -79,8 +114,8 @@
             border-radius: 999px;
             font-weight: 600;
         }
-        .hw-chip.ok { background: var(--ok-soft); color: #86EFAC; border-color: rgba(34,197,94,0.35); }
-        .hw-chip.err { background: var(--error-soft); color: #FCA5A5; border-color: rgba(239,68,68,0.4); }
+        .hw-chip.ok { background: var(--ok-soft); color: var(--ok); border-color: rgba(61, 220, 151, 0.35); }
+        .hw-chip.err { background: var(--error-soft); color: var(--error); border-color: rgba(255, 93, 108, 0.4); }
         .hw-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
         .tabs {
@@ -101,11 +136,17 @@
             font-weight: 500;
             color: var(--sub);
             cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .tab-btn:hover:not([aria-selected="true"]) {
+            color: var(--ink);
+            border-color: var(--sub);
         }
         .tab-btn[aria-selected="true"] {
             background: var(--accent);
-            color: #FFFFFF;
+            color: var(--accent-ink);
             border-color: var(--accent);
+            font-weight: 700;
         }
         .shortcut-hint {
             font-size: 12px;
@@ -170,13 +211,17 @@
             cursor: pointer;
             color: var(--ink);
             font-weight: 500;
+            transition: border-color 0.15s ease, color 0.15s ease;
         }
-        .btn-sec:hover:not(:disabled), .chip:hover:not(:disabled) { border-color: var(--sub); }
+        .btn-sec:hover:not(:disabled), .chip:hover:not(:disabled) {
+            border-color: var(--sub);
+            color: var(--ink);
+        }
         .btn-sec:disabled, .chip:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-danger-sm {
             background: var(--error-soft);
-            border: 1px solid rgba(239,68,68,0.4);
-            color: #FCA5A5;
+            border: 1px solid rgba(255, 93, 108, 0.4);
+            color: var(--error);
             font-size: 12px;
             padding: 5px 10px;
             border-radius: var(--radius-sm);
@@ -184,8 +229,8 @@
         }
         .btn-cancel {
             background: var(--error-soft);
-            border: 1px solid rgba(239,68,68,0.45);
-            color: #FCA5A5;
+            border: 1px solid rgba(255, 93, 108, 0.45);
+            color: var(--error);
             padding: 12px 16px;
             border-radius: var(--radius-md);
             font-size: 14px;
@@ -197,15 +242,16 @@
             font-size: 12px;
             font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
             font-variant-numeric: tabular-nums;
-            background: var(--accent-soft);
-            color: #93C5FD;
+            background: rgba(46, 230, 214, 0.14);
+            color: var(--teal);
+            border: 1px solid rgba(46, 230, 214, 0.35);
             padding: 3px 9px;
             border-radius: 6px;
             font-weight: 600;
         }
         .source-player-box {
             margin-bottom: 12px;
-            background: #000;
+            background: #000000;
             border-radius: var(--radius-md);
             overflow: hidden;
             border: 1px solid var(--line);
@@ -232,16 +278,17 @@
         .btn-render {
             flex: 1;
             background: var(--accent);
-            color: #FFFFFF;
+            color: var(--accent-ink);
             border: none;
             padding: 12px 16px;
             border-radius: var(--radius-md);
             font-size: 14.5px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
+            transition: background 0.15s ease, opacity 0.15s ease;
         }
         .btn-render:hover:not(:disabled) { background: var(--accent-hover); }
-        .btn-render:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+        .btn-render:disabled { background: var(--raised); color: var(--muted); border: 1px solid var(--line); cursor: not-allowed; }
         .suggestion-item {
             border: 1px solid var(--line);
             border-radius: var(--radius-sm);
@@ -257,9 +304,9 @@
         .phone-mockup {
             width: 256px;
             height: 455px;
-            background: #080A0D;
+            background: var(--bg);
             border-radius: 22px;
-            border: 6px solid #2D333D;
+            border: 6px solid var(--line);
             margin: 0 auto 14px auto;
             overflow: hidden;
             display: flex;
@@ -283,13 +330,16 @@
         .clip-item-actions { display: flex; gap: 6px; align-items: center; flex: none; }
         .clip-btn-play {
             background: var(--accent);
-            color: #FFF;
+            color: var(--accent-ink);
             border: none;
             padding: 5px 11px;
             border-radius: var(--radius-sm);
             font-size: 12px;
+            font-weight: 700;
             cursor: pointer;
+            transition: background 0.15s ease;
         }
+        .clip-btn-play:hover { background: var(--accent-hover); }
         .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
         .metric-card {
             background: var(--card);
@@ -301,7 +351,7 @@
         .metric-card .val { font-size: 22px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
         .metric-card .subtext { font-size: 12px; color: var(--muted); margin-top: 4px; }
         .terminal-box {
-            background: #0B0D10;
+            background: var(--card);
             color: var(--sub);
             border: 1px solid var(--line);
             font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -320,7 +370,7 @@
         }
         .details-box summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--sub); }
         .live-monitor-box {
-            background: #07090C;
+            background: var(--card);
             border: 1px solid var(--line);
             border-radius: var(--radius-md);
             padding: 10px;
@@ -343,15 +393,15 @@
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 0.4px;
-            background: rgba(239, 68, 68, 0.16);
-            color: #F87171;
-            border: 1px solid rgba(239, 68, 68, 0.35);
+            background: rgba(255, 138, 61, 0.16);
+            color: var(--sunset);
+            border: 1px solid rgba(255, 138, 61, 0.4);
         }
         .live-badge .dot-live {
             width: 7px;
             height: 7px;
             border-radius: 50%;
-            background: #EF4444;
+            background: var(--sunset);
         }
         .live-subpanel {
             background: var(--card);
@@ -377,10 +427,10 @@
             border-radius: 999px;
             margin-right: 6px;
         }
-        .pill-active { background: rgba(96, 165, 250, 0.18); color: #93C5FD; }
-        .pill-wait { background: rgba(245, 158, 11, 0.18); color: #FCD34D; }
-        .pill-saved { background: rgba(34, 197, 94, 0.18); color: #86EFAC; }
-        .pill-new { background: rgba(96, 165, 250, 0.15); color: #60A5FA; }
+        .pill-active { background: var(--accent-soft); color: var(--accent); }
+        .pill-wait { background: var(--warn-soft); color: var(--warn); }
+        .pill-saved { background: var(--ok-soft); color: var(--ok); }
+        .pill-new { background: rgba(46, 230, 214, 0.16); color: var(--teal); }
         .stacked-box {
             display: none;
             margin-top: 12px;
@@ -396,7 +446,7 @@
             right: 0;
             bottom: 0;
             height: 40px;
-            background: #0B0D10;
+            background: var(--card);
             color: var(--ink);
             display: flex;
             align-items: center;
@@ -407,12 +457,12 @@
             z-index: 100;
         }
         #fc-statusbar .s-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
-        #fc-statusbar.busy .s-dot { background: #60A5FA; }
+        #fc-statusbar.busy .s-dot { background: var(--sunset); }
         #fc-statusbar.err .s-dot { background: var(--error); }
         #fc-statusbar.warn .s-dot { background: var(--warn); }
         #fc-statusbar .s-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #fc-statusbar .s-progress { width: 140px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; display: none; }
-        #fc-statusbar .s-progress > i { display: block; height: 100%; background: #60A5FA; width: 0%; transition: width 0.2s; }
+        #fc-statusbar .s-progress > i { display: block; height: 100%; background: var(--grad-vice); width: 0%; transition: width 0.2s; }
 
         @media (max-width: 1200px) {
             body { padding: 14px 16px 64px 16px; }
@@ -852,7 +902,7 @@
                     <span id="preview-panel-title">Pré-visualização 9:16</span>
                     <div style="display:flex; gap:8px; align-items:center;">
                         <button type="button" id="btn-toggle-mockup-ratio" class="chip" style="padding:3px 8px; font-size:11px;">16:9 / 9:16</button>
-                        <a id="btn-download-clip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar MP4</a>
+                        <a id="btn-download-clip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:var(--teal); text-decoration:none;">Baixar MP4</a>
                     </div>
                 </div>
 
@@ -874,7 +924,7 @@
                         <option value="x">X (Twitter)</option>
                     </select>
                     <button id="btn-export-quick" type="button" class="btn-sec">Exportar pacote</button>
-                    <a id="btn-download-zip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:#60A5FA; text-decoration:none;">Baixar ZIP</a>
+                    <a id="btn-download-zip" href="#" download style="display:none; font-size:12.5px; font-weight:600; color:var(--teal); text-decoration:none;">Baixar ZIP</a>
                     <button id="btn-copy-export-text" type="button" class="chip" style="display:none;">Copiar Copy</button>
                 </div>
                 <div id="export-copy-preview" aria-live="polite" style="display:none; margin-top:10px; text-align:left; font-size:12px; color:var(--sub); background:var(--raised); border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; white-space:pre-wrap;"></div>
